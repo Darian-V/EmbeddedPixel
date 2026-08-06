@@ -1,0 +1,17 @@
+# Build directories
+build/
+bin/
+obj/
+*.elf
+*.bin
+*.hex
+*.map
+
+# IDE and Environment
+.vscode/
+.idea/
+.agents/
+
+# OS generated files
+.DS_Store
+Thumbs.db
