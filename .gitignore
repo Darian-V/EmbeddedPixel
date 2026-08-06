@@ -6,6 +6,7 @@ obj/
 *.bin
 *.hex
 *.map
+*.exe
 
 # IDE and Environment
 .vscode/
