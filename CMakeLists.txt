@@ -53,8 +53,12 @@ if(APP STREQUAL "bootloader")
 else()
     target_sources(${EXECUTABLE_NAME} PRIVATE
         ${CMAKE_SOURCE_DIR}/apps/${APP}/main.cpp
-        ${CMAKE_SOURCE_DIR}/components/tasks/BlinkTask.cpp
     )
+    if(APP STREQUAL "blinky")
+        target_sources(${EXECUTABLE_NAME} PRIVATE
+            ${CMAKE_SOURCE_DIR}/components/tasks/BlinkTask.cpp
+        )
+    endif()
 endif()
 
 # Load Board Configuration
