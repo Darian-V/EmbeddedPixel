@@ -3,10 +3,15 @@
 #include "BlinkTask.h"
 #include "Stm32H7Gpio.h"
 #include "FreeRtosThread.h"
+#include "console.h"
+#include <stdio.h>
 
 int main(void) {
     // 1. Initialize the board (Hardware specific)
     Board_Init();
+    console_init();
+
+    printf("\r\n=== Blinky Application Started! ===\r\n");
 
     // 2. Enable the GPIO Clock for Port D (where the Green LED is on Nucleo)
     __HAL_RCC_GPIOD_CLK_ENABLE();

@@ -23,8 +23,14 @@ target_sources(${EXECUTABLE_NAME} PRIVATE
 # HAL Abstraction Implementations
 target_sources(${EXECUTABLE_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/hal_impl/Stm32H7Gpio.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/FreeRtosThread.cpp
 )
+
+if(NOT APP STREQUAL "bootloader")
+    target_compile_definitions(${EXECUTABLE_NAME} PRIVATE USE_FREERTOS)
+    target_sources(${EXECUTABLE_NAME} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/FreeRtosThread.cpp
+    )
+endif()
 
 # STM32 Vendor HAL Sources
 file(GLOB HAL_SRCS 

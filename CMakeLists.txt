@@ -15,17 +15,47 @@ set(EXECUTABLE_NAME ${PROJECT_NAME})
 add_executable(${EXECUTABLE_NAME})
 
 # Common Include Directories
-target_include_directories(${EXECUTABLE_NAME} PRIVATE
-    ${CMAKE_SOURCE_DIR}/core/osal
+set(core_includes
     ${CMAKE_SOURCE_DIR}/core/hal
+    ${CMAKE_SOURCE_DIR}/core/osal
     ${CMAKE_SOURCE_DIR}/components/tasks
+    ${CMAKE_SOURCE_DIR}/components/sys
+)
+
+target_include_directories(${EXECUTABLE_NAME} PRIVATE
+    ${core_includes}
+)
+
+set(core_sources
+    ${CMAKE_SOURCE_DIR}/components/sys/console.c
+)
+
+target_sources(${EXECUTABLE_NAME} PRIVATE
+    ${core_sources}
 )
 
 # Application Sources
-target_sources(${EXECUTABLE_NAME} PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/${APP}/main.cpp
-    ${CMAKE_SOURCE_DIR}/components/tasks/BlinkTask.cpp
-)
+if(APP STREQUAL "bootloader")
+    target_include_directories(${EXECUTABLE_NAME} PRIVATE
+        ${CMAKE_SOURCE_DIR}/apps/${APP}
+        ${CMAKE_SOURCE_DIR}/vendor/stm32cubeh7rs/Middlewares/ST/STM32_ExtMem_Manager
+        ${CMAKE_SOURCE_DIR}/vendor/stm32cubeh7rs/Middlewares/ST/STM32_ExtMem_Manager/nor_sfdp
+        ${CMAKE_SOURCE_DIR}/vendor/stm32cubeh7rs/Middlewares/ST/STM32_ExtMem_Manager/sal
+    )
+    target_sources(${EXECUTABLE_NAME} PRIVATE
+        ${CMAKE_SOURCE_DIR}/apps/${APP}/main.cpp
+        ${CMAKE_SOURCE_DIR}/apps/${APP}/extmem_manager.c
+        ${CMAKE_SOURCE_DIR}/vendor/stm32cubeh7rs/Middlewares/ST/STM32_ExtMem_Manager/stm32_extmem.c
+        ${CMAKE_SOURCE_DIR}/vendor/stm32cubeh7rs/Middlewares/ST/STM32_ExtMem_Manager/nor_sfdp/stm32_sfdp_data.c
+        ${CMAKE_SOURCE_DIR}/vendor/stm32cubeh7rs/Middlewares/ST/STM32_ExtMem_Manager/nor_sfdp/stm32_sfdp_driver.c
+        ${CMAKE_SOURCE_DIR}/vendor/stm32cubeh7rs/Middlewares/ST/STM32_ExtMem_Manager/sal/stm32_sal_xspi.c
+    )
+else()
+    target_sources(${EXECUTABLE_NAME} PRIVATE
+        ${CMAKE_SOURCE_DIR}/apps/${APP}/main.cpp
+        ${CMAKE_SOURCE_DIR}/components/tasks/BlinkTask.cpp
+    )
+endif()
 
 # Load Board Configuration
 add_subdirectory(boards/${BOARD})
@@ -34,7 +64,9 @@ add_subdirectory(boards/${BOARD})
 add_subdirectory(targets/${TARGET})
 
 # Load Vendor Libraries (FreeRTOS)
-add_subdirectory(vendor)
+if(NOT APP STREQUAL "bootloader")
+    add_subdirectory(vendor)
+endif()
 
 # Print configuration
 message(STATUS "----------------------------------------")
