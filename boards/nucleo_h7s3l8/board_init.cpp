@@ -1,5 +1,6 @@
 #include "board_init.h"
 #include "stm32h7rsxx_hal.h"
+#include "Stm32H7Gpio.h"
 
 extern "C" void Error_Handler(void);
 
@@ -146,4 +147,18 @@ void Board_Init() {
     // Update the SystemCoreClock variable to reflect the actual hardware clock
     // (set by the bootloader) so FreeRTOS calculates SysTick correctly!
     SystemCoreClockUpdate();
+}
+
+// Nucleo-H7S3L8: Green LED on PD10
+static stm32::h7::Stm32H7Gpio g_green_led(GPIOD, GPIO_PIN_10);
+
+hal::IGpio& Board_GetLed() {
+    __HAL_RCC_GPIOD_CLK_ENABLE();
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin   = GPIO_PIN_10;
+    GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull  = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+    return g_green_led;
 }

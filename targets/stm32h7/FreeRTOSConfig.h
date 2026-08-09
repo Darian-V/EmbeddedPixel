@@ -3,7 +3,13 @@
 
 #if defined(__ICCARM__) || defined(__CC_ARM) || defined(__GNUC__)
     #include <stdint.h>
+    #ifdef __cplusplus
+    extern "C" {
+    #endif
     extern uint32_t SystemCoreClock;
+    #ifdef __cplusplus
+    }
+    #endif
 #endif
 
 #define configUSE_PREEMPTION                    1

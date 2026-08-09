@@ -33,7 +33,7 @@ Applications are compiled to live at `0x70000000` (External Flash).
 The repository is structured to enforce strict dependency rules. Higher layers can only depend on lower layers.
 
 *   `apps/`: **Application Layer.** Contains `main.cpp` entry points for different applications.
-*   `boards/`: **Board Support Packages (BSPs).** PCBA-specific configurations. Each board defines its own oscillators, voltage regulators, pin muxing (`board_init.cpp`), and linker scripts for both the bootloader and the application.
+*   `boards/`: **Board Support Packages (BSPs).** PCBA-specific configurations. Each board defines its own oscillators, voltage regulators, pin muxing (`board_init.cpp`), linker scripts, and board resource accessors (e.g. `Board_GetLed()`).
 *   `components/`: **Reusable Modules.** Hardware-independent business logic, algorithms, and RTOS Tasks (e.g. `BlinkTask`, `NetManager`).
 *   `core/`:
     *   `osal/`: **OS Abstraction Layer.** C++ interfaces wrapping the FreeRTOS API (`Thread`, `Mutex`).
@@ -79,7 +79,7 @@ cmake --build build
 
 Output: `apps/blinky/programming_files/blinky_nucleo_h7s3l8.bin`
 
-#### Ethernet Dev (`feature/ethernet` branch)
+#### Ethernet Dev
 ```bash
 cmake -G "MinGW Makefiles" -S . -B build -DAPP=ethernetdev
 cmake --build build
@@ -120,6 +120,50 @@ Fixed port assignments (in `cmake/net_config.h.in`):
 ### 3. Creating a New Application
 
 A blank starting point exists in `apps/template/`. Copy it and register the new app name in the root `CMakeLists.txt` if it needs `BlinkTask` or other shared components.
+
+## Porting to a New Board
+
+The architecture is designed so that `main.cpp` requires **zero changes** when targeting a new board. All board-specific knowledge is encapsulated in `boards/<board>/`.
+
+### Board Contract
+
+Each board must implement two functions declared in `board_init.h`:
+
+```cpp
+// Performs all hardware init: MPU, cache, clocks, HAL.
+void Board_Init();
+
+// Returns the board's status LED, fully initialized (clock enabled, GPIO configured).
+hal::IGpio& Board_GetLed();
+```
+
+`main.cpp` calls these and receives abstract interface references — it never touches a register or pin number.
+
+### Steps to Add a New Board
+
+1. **Create `boards/<new_board>/`** with:
+   - `board_init.h` — copy the existing one verbatim (same API contract)
+   - `board_init.cpp` — implement `Board_Init()` and `Board_GetLed()` for the new hardware
+   - Linker scripts (`.ld`) for bootloader and application
+   - `stm32<mcu>xx_hal_msp.c` — peripheral MSP init callbacks
+   - `CMakeLists.txt` — add sources, include path, linker script selection
+
+2. **If using a new MCU family**, create `targets/<new_target>/` with:
+   - Concrete HAL implementations (`<Mcu>Gpio.cpp`, `<Mcu>Eth.cpp`, etc.)
+   - Startup file and system init (`.s`, `.c`)
+   - `FreeRTOSConfig.h` tuned for the target
+   - `CMakeLists.txt` — compiler flags, CPU arch, HAL sources
+
+3. **Build** by passing the new board and target:
+   ```bash
+   cmake -G "MinGW Makefiles" -S . -B build \
+         -DAPP=ethernetdev \
+         -DBOARD=<new_board> \
+         -DTARGET=<new_target>
+   cmake --build build
+   ```
+
+4. **`main.cpp` — unchanged ✅**
 
 ## C++ & FreeRTOS "Gotchas"
 - **MSP Reset Bug:** On Cortex-M processors, FreeRTOS resets the Main Stack Pointer (MSP) when the scheduler starts. **NEVER** allocate hardware drivers or RTOS Tasks on the local `main()` stack. Always mark them as `static` or allocate them globally so they are placed in `.bss` and survive the scheduler boot sequence.
