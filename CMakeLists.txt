@@ -20,6 +20,7 @@ set(core_includes
     ${CMAKE_SOURCE_DIR}/core/osal
     ${CMAKE_SOURCE_DIR}/components/tasks
     ${CMAKE_SOURCE_DIR}/components/sys
+    ${CMAKE_SOURCE_DIR}/components/net
 )
 
 target_include_directories(${EXECUTABLE_NAME} PRIVATE
@@ -28,6 +29,7 @@ target_include_directories(${EXECUTABLE_NAME} PRIVATE
 
 set(core_sources
     ${CMAKE_SOURCE_DIR}/components/sys/console.c
+    ${CMAKE_SOURCE_DIR}/components/net/NetManager.cpp
 )
 
 target_sources(${EXECUTABLE_NAME} PRIVATE
@@ -54,7 +56,7 @@ else()
     target_sources(${EXECUTABLE_NAME} PRIVATE
         ${CMAKE_SOURCE_DIR}/apps/${APP}/main.cpp
     )
-    if(APP STREQUAL "blinky")
+    if(APP STREQUAL "blinky" OR APP STREQUAL "ethernetdev")
         target_sources(${EXECUTABLE_NAME} PRIVATE
             ${CMAKE_SOURCE_DIR}/components/tasks/BlinkTask.cpp
         )
@@ -67,9 +69,23 @@ add_subdirectory(boards/${BOARD})
 # Load Target Configuration
 add_subdirectory(targets/${TARGET})
 
-# Load Vendor Libraries (FreeRTOS)
+# Load Vendor Libraries (FreeRTOS, lwIP)
 if(NOT APP STREQUAL "bootloader")
     add_subdirectory(vendor)
+    
+    # Network Configuration
+    set(NET_USE_DHCP        ON   CACHE BOOL   "Enable DHCP (falls back to static if no server)")
+    set(NET_STATIC_IP_ADDR  "192, 168, 1, 100" CACHE STRING "Static/fallback IP address")
+    set(NET_STATIC_NETMASK  "255, 255, 255, 0" CACHE STRING "Static/fallback subnet mask")
+    set(NET_STATIC_GATEWAY  "192, 168, 1, 1"   CACHE STRING "Static/fallback gateway")
+    set(NET_NODE_ID         "1"             CACHE STRING "Unique node ID (1-65535)")
+    set(NET_DHCP_TIMEOUT_MS "5000"          CACHE STRING "DHCP timeout before static fallback (ms)")
+
+    configure_file(
+        ${CMAKE_SOURCE_DIR}/cmake/net_config.h.in
+        ${CMAKE_BINARY_DIR}/net_config.h
+    )
+    target_include_directories(${EXECUTABLE_NAME} PRIVATE ${CMAKE_BINARY_DIR})
 endif()
 
 # Print configuration

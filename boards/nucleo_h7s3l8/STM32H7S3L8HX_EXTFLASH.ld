@@ -186,6 +186,16 @@ SECTIONS
     __NONCACHEABLEBUFFER_END = .;  /* create symbol for start of section */
   } > RAM_NONCACHEABLEBUFFER
 
+  /* Ethernet DMA buffers in AHB SRAM */
+  .eth_buffers (NOLOAD) :
+  {
+    . = ALIGN(4);
+    __eth_buffers_start = .;
+    KEEP(*(.eth_rx_buffers))
+    KEEP(*(.eth_tx_buffers))
+    __eth_buffers_end = .;
+  } > SRAMAHB
+
   /* User_heap_stack section, used to check that there is enough "DTCM" Ram  type memory left */
   ._user_heap_stack :
   {

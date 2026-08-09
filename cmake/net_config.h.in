@@ -1,0 +1,14 @@
+// Auto-generated — do not edit
+#pragma once
+
+#cmakedefine01 NET_USE_DHCP
+#define NET_STATIC_IP_ADDR    @NET_STATIC_IP_ADDR@
+#define NET_STATIC_NETMASK    @NET_STATIC_NETMASK@
+#define NET_STATIC_GATEWAY    @NET_STATIC_GATEWAY@
+#define NET_NODE_ID           @NET_NODE_ID@
+#define NET_DHCP_TIMEOUT_MS   @NET_DHCP_TIMEOUT_MS@
+
+// Port assignments
+#define NET_TCP_CMD_PORT      4000
+#define NET_UDP_DATA_PORT     5000
+#define NET_UDP_DISCOVERY_PORT 3999
