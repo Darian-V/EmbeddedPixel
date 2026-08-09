@@ -1,6 +1,6 @@
 # STM32H7 Ethernet Development Lessons Learned
 
-During the development of the Ethernet driver and lwIP port for the Nucleo-H7S3L8 board, we encountered and resolved several complex issues. This document outlines the key lessons learned to serve as a reference for future bare-metal and RTOS networking development on the STM32H7RS platform.
+**Status Note:** The Ethernet Rx path is currently still failing. This document records the major roadblocks and architectural discoveries made so far.
 
 ## 1. STM32H7RS HAL `pbuf` Allocation Architecture
 **Symptom:** The PHY negotiated perfectly, the link was up, and the transmit (Tx) path showed success, but the receive (Rx) path silently dropped all packets (Ping returned "Destination host unreachable").
