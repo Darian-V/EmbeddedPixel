@@ -20,7 +20,6 @@ set(core_includes
     ${CMAKE_SOURCE_DIR}/core/osal
     ${CMAKE_SOURCE_DIR}/components/tasks
     ${CMAKE_SOURCE_DIR}/components/sys
-    ${CMAKE_SOURCE_DIR}/components/net
 )
 
 target_include_directories(${EXECUTABLE_NAME} PRIVATE
@@ -29,7 +28,6 @@ target_include_directories(${EXECUTABLE_NAME} PRIVATE
 
 set(core_sources
     ${CMAKE_SOURCE_DIR}/components/sys/console.c
-    ${CMAKE_SOURCE_DIR}/components/net/NetManager.cpp
 )
 
 target_sources(${EXECUTABLE_NAME} PRIVATE
@@ -53,8 +51,12 @@ if(APP STREQUAL "bootloader")
         ${CMAKE_SOURCE_DIR}/vendor/stm32cubeh7rs/Middlewares/ST/STM32_ExtMem_Manager/sal/stm32_sal_xspi.c
     )
 else()
+    target_include_directories(${EXECUTABLE_NAME} PRIVATE
+        ${CMAKE_SOURCE_DIR}/components/net
+    )
     target_sources(${EXECUTABLE_NAME} PRIVATE
         ${CMAKE_SOURCE_DIR}/apps/${APP}/main.cpp
+        ${CMAKE_SOURCE_DIR}/components/net/NetManager.cpp
     )
     if(APP STREQUAL "blinky" OR APP STREQUAL "ethernetdev")
         target_sources(${EXECUTABLE_NAME} PRIVATE
@@ -95,9 +97,17 @@ message(STATUS "Target Board         : ${BOARD}")
 message(STATUS "Target MCU           : ${TARGET}")
 message(STATUS "----------------------------------------")
 
-# Generate .bin and .hex
+# Generate .bin and .hex, then stage artifacts into apps/${APP}/programming_files/
 add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} -O binary ${EXECUTABLE_NAME} ${EXECUTABLE_NAME}.bin
-    COMMAND ${CMAKE_OBJCOPY} -O ihex ${EXECUTABLE_NAME} ${EXECUTABLE_NAME}.hex
-    COMMENT "Generating .bin and .hex files"
+    COMMAND ${CMAKE_OBJCOPY} -O ihex   ${EXECUTABLE_NAME} ${EXECUTABLE_NAME}.hex
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        ${CMAKE_SOURCE_DIR}/apps/${APP}/programming_files
+    COMMAND ${CMAKE_COMMAND} -E copy
+        ${CMAKE_BINARY_DIR}/${EXECUTABLE_NAME}.bin
+        ${CMAKE_SOURCE_DIR}/apps/${APP}/programming_files/${EXECUTABLE_NAME}.bin
+    COMMAND ${CMAKE_COMMAND} -E copy
+        ${CMAKE_BINARY_DIR}/${EXECUTABLE_NAME}.hex
+        ${CMAKE_SOURCE_DIR}/apps/${APP}/programming_files/${EXECUTABLE_NAME}.hex
+    COMMENT "Generating .bin/.hex and copying to apps/${APP}/programming_files/"
 )
