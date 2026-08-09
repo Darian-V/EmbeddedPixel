@@ -51,6 +51,11 @@ public:
      * @return true if link is up, false otherwise.
      */
     virtual bool WaitForLink(uint32_t timeout_ms) = 0;
+
+    /**
+     * @brief Print the MAC MMC Receive Counters
+     */
+    virtual void PrintMmcCounters() = 0;
 };
 
 #endif // IETH_H

@@ -120,21 +120,13 @@ Stm32H7Eth::~Stm32H7Eth() {
 }
 
 bool Stm32H7Eth::Init() {
-    uint8_t macAddr[6] = {0x00, 0x80, 0xE1, 0x11, 0x22, 0x33};
-
-    heth.Instance = ETH;
-    heth.Init.MACAddr = macAddr;
-    heth.Init.MediaInterface = HAL_ETH_RMII_MODE;
-    heth.Init.TxDesc = DMATxDscrTab;
-    heth.Init.RxDesc = DMARxDscrTab;
-    heth.Init.RxBuffLen = ETH_MAX_PAYLOAD;
-
-    g_heth = &heth;
+    // Ensure SRAM1 is clocked, otherwise all accesses to 0x30000000 are dropped!
+    __HAL_RCC_SRAM1_CLK_ENABLE();
 
     // Configure MPU for SRAMAHB 0x30000000 to be Non-Cacheable for Ethernet DMA
     MPU_Region_InitTypeDef MPU_InitStruct = {0};
     HAL_MPU_Disable();
-    
+
     MPU_InitStruct.Enable = MPU_REGION_ENABLE;
     MPU_InitStruct.Number = MPU_REGION_NUMBER7; 
     MPU_InitStruct.BaseAddress = 0x30000000;
@@ -149,8 +141,23 @@ bool Stm32H7Eth::Init() {
     
     HAL_MPU_ConfigRegion(&MPU_InitStruct);
     HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
+
+    // Invalidate cache to ensure no stale lines remain for the newly non-cacheable region
+    SCB_CleanInvalidateDCache();
     __DSB();
     __ISB();
+
+    uint8_t macAddr[6] = {0x00, 0x80, 0xE1, 0x11, 0x22, 0x33};
+
+    heth.Instance = ETH;
+    heth.Init.MACAddr = macAddr;
+    heth.Init.MediaInterface = HAL_ETH_RMII_MODE;
+
+    heth.Init.TxDesc = DMATxDscrTab;
+    heth.Init.RxDesc = DMARxDscrTab;
+    heth.Init.RxBuffLen = ETH_MAX_PAYLOAD;
+
+    g_heth = &heth;
     
     // Force a complete clean and invalidate of the entire D-Cache just in case 
     // the startup code cached these regions before we configured the MPU.
@@ -180,8 +187,7 @@ bool Stm32H7Eth::Init() {
         HAL_ETH_SetMACFilterConfig(&heth, &filterConf);
     }
 
-    // Start in polling mode (NO interrupts)
-    HAL_ETH_Start(&heth);
+    // MAC start moved to WaitForLink() to ensure stable RMII clock
     return true;
 }
 
@@ -320,6 +326,10 @@ bool Stm32H7Eth::WaitForLink(uint32_t timeout_ms) {
                     }
                 }
                 printf("--------------------------\r\n");
+                
+                // Start MAC now that the PHY clock is fully stable
+                HAL_ETH_Start(&heth);
+                
                 return true;
             }
         }
@@ -339,4 +349,18 @@ void Stm32H7Eth::GetMacAddress(uint8_t* mac_addr) {
 
 void Stm32H7Eth::Error_Handler() {
     while (1) { }
+}
+
+void Stm32H7Eth::PrintMmcCounters() {
+    printf("--- MAC MMC Counters ---\r\n");
+    printf("Desc0.DESC3: 0x%08lX\r\n", DMARxDscrTab[0].DESC3);
+    printf("Desc Addr: %p, Buff Addr: %p\r\n", (void*)DMARxDscrTab, (void*)Rx_Buff);
+    printf("MACCR: 0x%08lX\r\n", heth.Instance->MACCR);
+    printf("DMACSR: 0x%08lX\r\n", heth.Instance->DMACSR);
+    printf("MMCCR: 0x%08lX\r\n", heth.Instance->MMCCR);
+    printf("Rx CRC Error: %lu\r\n", heth.Instance->MMCRCRCEPR);
+    printf("Rx Alignment Error: %lu\r\n", heth.Instance->MMCRAEPR);
+    printf("Rx Good Unicast: %lu\r\n", heth.Instance->MMCRUPGR);
+    printf("Rx Packets total (Good/Bad): %lu\r\n", heth.Instance->MMCRLPITCR);
+    printf("------------------------\r\n");
 }

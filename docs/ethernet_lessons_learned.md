@@ -1,6 +1,6 @@
 # STM32H7 Ethernet Development Lessons Learned
 
-**Status Note:** The Ethernet Rx path is currently still failing. This document records the major roadblocks and architectural discoveries made so far.
+**Status Note:** The Ethernet Rx/Tx paths are completely functional. This document records the major roadblocks and architectural discoveries made during the bring-up phase.
 
 ## 1. STM32H7RS HAL `pbuf` Allocation Architecture
 **Symptom:** The PHY negotiated perfectly, the link was up, and the transmit (Tx) path showed success, but the receive (Rx) path silently dropped all packets (Ping returned "Destination host unreachable").
@@ -48,3 +48,16 @@ Relying solely on "Link UP" (Basic Status Register Bit 2) is insufficient, as it
 Always write a PHY diagnostic function that dumps all 32 PHY registers (especially Register 0, 1, 4, 5, and 31 for LAN8742) over the serial console. 
 - A successful 100M Full-Duplex negotiation is confirmed if Auto-Negotiation is Complete (Reg 1, Bit 5 is 1) and the PHY Specific Status Register (Reg 31) reflects `110` in the speed indication bits.
 - This immediately rules out hardware/clocking faults and allows you to focus strictly on DMA/Cache/Software issues.
+
+## 5. AHB SRAM Clock Initialization
+**Symptom:** The CPU wrote to the DMA descriptors to hand them to the DMA, but the DMA immediately returned an `RBU` (Receive Buffer Unavailable) error. The `HAL_ETH_RxAllocateCallback` was called in an infinite loop, burning through buffers without any success.
+
+**Root Cause:**
+On the STM32H7RS, the Ethernet Rx/Tx buffers and DMA descriptors are mapped to `SRAMAHB` (`SRAM1` at `0x30000000`). Unlike some older STM32 families where SRAM is universally clocked by default, the STM32H7RS explicitly gates the clock to `SRAM1` to save power. If the clock is disabled (`RCC_AHB2ENR_SRAM1EN == 0`), all CPU writes to `0x30000000` are completely ignored by the bus, and reads return `0x00000000`. This causes the HAL to read an empty descriptor, allocate a buffer, attempt to write it to memory (which is ignored), and loop infinitely.
+
+**Lesson:**
+Before configuring the MPU or initializing the MAC/DMA, you must explicitly enable the clock to the specific SRAM bank where your descriptors and buffers reside:
+```cpp
+__HAL_RCC_SRAM1_CLK_ENABLE();
+```
+Without this single line, the entire Ethernet subsystem will fail silently, appearing as a cache or memory mapping issue.

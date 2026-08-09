@@ -25,7 +25,7 @@ static void tcpip_init_done(void *arg) {
     ip_addr_set_zero_ip4(&netmask);
     ip_addr_set_zero_ip4(&gw);
 #else
-    IP4_ADDR(&ipaddr, 192, 168, 1, 100);
+    IP4_ADDR(&ipaddr, 192, 168, 1, 111);
     IP4_ADDR(&netmask, 255, 255, 255, 0);
     IP4_ADDR(&gw, 192, 168, 1, 1);
 #endif
@@ -84,6 +84,7 @@ void NetManager::run() {
         }
 #endif
         ethernetif_input(&gnetif);
+        
         vTaskDelay(10); // Polling delay
     }
 }

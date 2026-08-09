@@ -16,6 +16,7 @@ public:
     bool Transmit(struct pbuf *p) override;
     uint32_t GetPhyId() override;
     bool WaitForLink(uint32_t timeout_ms) override;
+    void PrintMmcCounters() override;
 
 private:
     ETH_HandleTypeDef heth;

@@ -74,7 +74,7 @@ if(NOT APP STREQUAL "bootloader")
     add_subdirectory(vendor)
     
     # Network Configuration
-    set(NET_USE_DHCP        ON   CACHE BOOL   "Enable DHCP (falls back to static if no server)")
+    set(NET_USE_DHCP        OFF  CACHE BOOL   "Enable DHCP (falls back to static if no server)")
     set(NET_STATIC_IP_ADDR  "192, 168, 1, 100" CACHE STRING "Static/fallback IP address")
     set(NET_STATIC_NETMASK  "255, 255, 255, 0" CACHE STRING "Static/fallback subnet mask")
     set(NET_STATIC_GATEWAY  "192, 168, 1, 1"   CACHE STRING "Static/fallback gateway")

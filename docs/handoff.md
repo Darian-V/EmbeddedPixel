@@ -3,17 +3,17 @@
 ## Current Status
 We are currently developing the bare-metal Ethernet driver and lwIP port for the Nucleo-H7S3L8 board. 
 - **PHY & Link**: The LAN8742 PHY successfully auto-negotiates to 100M Full-Duplex. The physical link is confirmed healthy.
-- **Transmit (Tx) Path**: The DMA successfully completes transmissions (we see `ETH: Tx done` or similar), though it is unverified if the packets reach the network properly due to the Rx failure.
-- **Receive (Rx) Path**: **CURRENTLY BROKEN**. The board drops or fails to process incoming packets. Pinging the board (`192.168.1.100`) from a PC results in "Destination host unreachable".
+- **Transmit (Tx) Path**: The DMA successfully completes transmissions and packets are routed correctly.
+- **Receive (Rx) Path**: **FULLY FUNCTIONAL**. The board successfully processes incoming packets and LwIP correctly responds to Pings (e.g. `192.168.1.111`).
 
-## Recent Changes (Unverified / Failing)
-In the latest commit, we completely rewrote `Stm32H7Eth::ProcessRx()` and added the ST HAL expected weak callbacks (`HAL_ETH_RxAllocateCallback` and `HAL_ETH_RxLinkCallback`). 
-We also added a "nuclear option" for D-Cache coherency (`SCB_CleanInvalidateDCache()` right after MPU enable). 
-*Note: This latest code state is pushed to the `feature/ethernet` branch but the Rx path remains non-functional.*
+## Recent Changes (SUCCESSFUL)
+In the latest commit, we resolved the final missing piece of the Ethernet Rx path puzzle. 
+- The STM32H7RS has `SRAMAHB` (`SRAM1` at `0x30000000`) clock-gated by default to save power. 
+- We added `__HAL_RCC_SRAM1_CLK_ENABLE()` to `Stm32H7Eth::Init()`.
+- Previously, the disabled clock caused the CPU writes (specifically assigning the `OWN=1` bit and buffer addresses to the DMA descriptors) to be silently dropped by the bus matrix. The DMA hardware, seeing `OWN=0`, threw a continuous `RBU` (Receive Buffer Unavailable) error and LwIP looped infinitely trying to allocate new buffers for the failed descriptors.
+- With the clock enabled, the CPU descriptor writes now persist in SRAM, the DMA correctly receives packets, and the ping responds flawlessly.
+- We also cleaned up the debug logging now that the driver is stable.
 
-## Next Steps for Debugging Rx
-1. **Verify DMA Descriptor Ownership**: Check if the DMA is actually setting the `OWN` bit back to the CPU after a packet arrives. You can pause the debugger and inspect the memory at `0x30000000` (where `DMARxDscrTab` lives) to see if the descriptors change when a ping is sent.
-2. **Verify MAC Counters**: Inspect the Ethernet MAC registers (specifically the MMC Receive Counters) via the debugger to see if the MAC is actually receiving broadcast ARP packets from the PHY. If the MAC counters do not increment, the issue is between the PHY and the MAC (e.g., RMII clocking configuration `ETH_RMII_REF_CLK`).
-3. **RMII Clock Configuration**: Double check `RCC_ETH1REFCLKSOURCE_PHY` vs `RCC_ETH1PHYCLKSOURCE_PLL3S`. Ensure the Nucleo board hardware expects the STM32 to provide the 50MHz clock vs the PHY providing it.
-4. **MPU & Cache**: If the MAC counters increment but the DMA descriptors don't update, verify that the MPU region size and attributes for `0x30000000` are perfectly aligned and applied.
-5. **Promiscuous Mode**: Ensure `filterConf.PromiscuousMode = ENABLE;` is actually taking effect in the MAC filtering registers.
+## Next Steps
+- Implement higher-level networking protocols (e.g. DHCP, TCP/UDP sockets) using the fully functional LwIP stack.
+- Review LwIP configuration (`lwipopts.h`) to optimize memory and performance.
