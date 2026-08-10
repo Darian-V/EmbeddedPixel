@@ -18,6 +18,7 @@ target_sources(${EXECUTABLE_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/startup_stm32h7s3l8hx.s
     ${CMAKE_CURRENT_SOURCE_DIR}/system_stm32h7rsxx.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stm32h7_it.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/fault_handler.cpp
 )
 
 # HAL Abstraction Implementations
@@ -29,9 +30,11 @@ if(NOT APP STREQUAL "bootloader")
     target_compile_definitions(${EXECUTABLE_NAME} PRIVATE USE_FREERTOS)
     target_sources(${EXECUTABLE_NAME} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/hal_impl/Stm32H7Eth.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/hal_impl/Lan8742Phy.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/FreeRtosThread.cpp
     )
 endif()
+
 
 # STM32 Vendor HAL Sources
 file(GLOB HAL_SRCS 
@@ -56,13 +59,15 @@ target_compile_options(${EXECUTABLE_NAME} PRIVATE
     -fno-rtti
 )
 
+# Target-specific link flags
 target_link_options(${EXECUTABLE_NAME} PRIVATE
     -mcpu=cortex-m7
     -mthumb
     -mfloat-abi=hard
     -mfpu=fpv5-d16
+    -Wl,-Map=${CMAKE_BINARY_DIR}/${EXECUTABLE_NAME}.map,--cref
     -Wl,--gc-sections
-    -Wl,-Map=${CMAKE_BINARY_DIR}/${EXECUTABLE_NAME}.map
+    -Wl,--print-memory-usage
     --specs=nano.specs
     --specs=nosys.specs
 )

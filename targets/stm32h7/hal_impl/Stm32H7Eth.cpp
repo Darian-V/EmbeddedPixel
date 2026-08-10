@@ -1,262 +1,77 @@
 #include "Stm32H7Eth.h"
+#include "net_log.h"
 #include <string.h>
-
-#define ETH_RX_DESC_CNT 4
-#define ETH_TX_DESC_CNT 4
-#define ETH_MAX_PAYLOAD 1536
-
-__attribute__((aligned(32), section(".eth_rx_buffers"))) ETH_DMADescTypeDef DMARxDscrTab[ETH_RX_DESC_CNT];
-__attribute__((aligned(32), section(".eth_tx_buffers"))) ETH_DMADescTypeDef DMATxDscrTab[ETH_TX_DESC_CNT];
-__attribute__((aligned(32), section(".eth_rx_buffers"))) uint8_t Rx_Buff[ETH_RX_DESC_CNT][ETH_MAX_PAYLOAD];
-__attribute__((aligned(32), section(".eth_tx_buffers"))) uint8_t Tx_Buff[ETH_TX_DESC_CNT][ETH_MAX_PAYLOAD];
-
-static ETH_HandleTypeDef* g_heth = nullptr;
-
-extern "C" void ETH_IRQHandler(void) {
-    if (g_heth) {
-        HAL_ETH_IRQHandler(g_heth);
-    }
-}
-
-extern "C" void HAL_ETH_MspInit(ETH_HandleTypeDef* ethHandle) {
-    if(ethHandle->Instance == ETH) {
-        GPIO_InitTypeDef GPIO_InitStruct = {0};
-        RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
-
-        /* Configure PLL3 for Ethernet PHY (50MHz) */
-        RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-        RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_NONE;
-        RCC_OscInitStruct.PLL3.PLLState = RCC_PLL_ON;
-        RCC_OscInitStruct.PLL3.PLLSource = RCC_PLLSOURCE_HSI;
-        RCC_OscInitStruct.PLL3.PLLM = 4;
-        RCC_OscInitStruct.PLL3.PLLN = 25;
-        RCC_OscInitStruct.PLL3.PLLP = 2;
-        RCC_OscInitStruct.PLL3.PLLQ = 2;
-        RCC_OscInitStruct.PLL3.PLLR = 2;
-        RCC_OscInitStruct.PLL3.PLLS = 8;
-        RCC_OscInitStruct.PLL3.PLLT = 2;
-        RCC_OscInitStruct.PLL3.PLLFractional = 0;
-        HAL_RCC_OscConfig(&RCC_OscInitStruct);
-
-        /* Configure clocks */
-        PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ETH1REF|RCC_PERIPHCLK_ETH1PHY;
-        PeriphClkInit.Eth1RefClockSelection = RCC_ETH1REFCLKSOURCE_PHY;
-        PeriphClkInit.Eth1PhyClockSelection = RCC_ETH1PHYCLKSOURCE_PLL3S;
-        HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit);
-
-        /* Enable Peripheral clock */
-        __HAL_RCC_ETH1MAC_CLK_ENABLE();
-        __HAL_RCC_ETH1TX_CLK_ENABLE();
-        __HAL_RCC_ETH1RX_CLK_ENABLE();
-
-        __HAL_RCC_GPIOA_CLK_ENABLE();
-        __HAL_RCC_GPIOB_CLK_ENABLE();
-        __HAL_RCC_GPIOG_CLK_ENABLE();
-        __HAL_RCC_GPIOD_CLK_ENABLE();
-        
-        __HAL_RCC_SBS_CLK_ENABLE();
-
-        // PD4 -> ETH_PHY_INTN / AF11
-        GPIO_InitStruct.Pin = GPIO_PIN_4;
-        GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-        GPIO_InitStruct.Pull = GPIO_NOPULL;
-        GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-        GPIO_InitStruct.Alternate = GPIO_AF11_ETH;
-        HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
-
-        // PB6 -> ETH_RMII_REF_CLK
-        GPIO_InitStruct.Pin = GPIO_PIN_6;
-        GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-        GPIO_InitStruct.Pull = GPIO_NOPULL;
-        GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-        GPIO_InitStruct.Alternate = GPIO_AF11_ETH;
-        HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-        // PG4 -> ETH_RMII_RXD0, PG5 -> ETH_RMII_RXD1, PG6 -> ETH_MDC
-        // PG11 -> ETH_RMII_TX_EN, PG12 -> ETH_RMII_TXD1, PG13 -> ETH_RMII_TXD0
-        GPIO_InitStruct.Pin = GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_13;
-        GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-        GPIO_InitStruct.Pull = GPIO_NOPULL;
-        GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-        GPIO_InitStruct.Alternate = GPIO_AF11_ETH;
-        HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
-
-        // PA2 -> ETH_MDIO, PA7 -> ETH_RMII_CRS_DV
-        GPIO_InitStruct.Pin = GPIO_PIN_2 | GPIO_PIN_7;
-        GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-        GPIO_InitStruct.Pull = GPIO_NOPULL;
-        GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-        GPIO_InitStruct.Alternate = GPIO_AF11_ETH;
-        HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-        /* Peripheral interrupt init */
-        HAL_NVIC_SetPriority(ETH_IRQn, 5, 0);
-        HAL_NVIC_EnableIRQ(ETH_IRQn);
-    }
-}
-
-extern "C" void HAL_ETH_MspDeInit(ETH_HandleTypeDef* ethHandle) {
-    if(ethHandle->Instance==ETH) {
-        __HAL_RCC_ETH1MAC_CLK_DISABLE();
-        __HAL_RCC_ETH1TX_CLK_DISABLE();
-        __HAL_RCC_ETH1RX_CLK_DISABLE();
-
-        HAL_GPIO_DeInit(GPIOD, GPIO_PIN_4);
-        HAL_GPIO_DeInit(GPIOB, GPIO_PIN_6);
-        HAL_GPIO_DeInit(GPIOG, GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_11|GPIO_PIN_12|GPIO_PIN_13);
-        HAL_GPIO_DeInit(GPIOA, GPIO_PIN_2|GPIO_PIN_7);
-        HAL_NVIC_DisableIRQ(ETH_IRQn);
-    }
-}
-
-Stm32H7Eth::Stm32H7Eth() : link_is_up(false) {
-    // No interrupts, polling mode only
-    // HAL_NVIC_SetPriority(ETH_IRQn, 5, 0);
-    // HAL_NVIC_EnableIRQ(ETH_IRQn);
-}
-
-Stm32H7Eth::~Stm32H7Eth() {
-    HAL_ETH_DeInit(&heth);
-}
-
-bool Stm32H7Eth::Init() {
-    // Ensure SRAM1 is clocked, otherwise all accesses to 0x30000000 are dropped!
-    __HAL_RCC_SRAM1_CLK_ENABLE();
-
-    // Configure MPU for SRAMAHB 0x30000000 to be Non-Cacheable for Ethernet DMA
-    MPU_Region_InitTypeDef MPU_InitStruct = {0};
-    HAL_MPU_Disable();
-
-    MPU_InitStruct.Enable = MPU_REGION_ENABLE;
-    MPU_InitStruct.Number = MPU_REGION_NUMBER7; 
-    MPU_InitStruct.BaseAddress = 0x30000000;
-    MPU_InitStruct.Size = MPU_REGION_SIZE_32KB;
-    MPU_InitStruct.SubRegionDisable = 0x0;
-    MPU_InitStruct.TypeExtField = MPU_TEX_LEVEL1; 
-    MPU_InitStruct.AccessPermission = MPU_REGION_FULL_ACCESS;
-    MPU_InitStruct.DisableExec = MPU_INSTRUCTION_ACCESS_DISABLE;
-    MPU_InitStruct.IsShareable = MPU_ACCESS_SHAREABLE;
-    MPU_InitStruct.IsCacheable = MPU_ACCESS_NOT_CACHEABLE;
-    MPU_InitStruct.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
-    
-    HAL_MPU_ConfigRegion(&MPU_InitStruct);
-    HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
-
-    // Invalidate cache to ensure no stale lines remain for the newly non-cacheable region
-    SCB_CleanInvalidateDCache();
-    __DSB();
-    __ISB();
-
-    uint8_t macAddr[6] = {0x00, 0x80, 0xE1, 0x11, 0x22, 0x33};
-
-    heth.Instance = ETH;
-    heth.Init.MACAddr = macAddr;
-    heth.Init.MediaInterface = HAL_ETH_RMII_MODE;
-
-    heth.Init.TxDesc = DMATxDscrTab;
-    heth.Init.RxDesc = DMARxDscrTab;
-    heth.Init.RxBuffLen = ETH_MAX_PAYLOAD;
-
-    g_heth = &heth;
-    
-    // Force a complete clean and invalidate of the entire D-Cache just in case 
-    // the startup code cached these regions before we configured the MPU.
-    SCB_CleanInvalidateDCache();
-
-    if (HAL_ETH_Init(&heth) != HAL_OK) {
-        return false;
-    }
-
-    uint32_t phyreg = 0;
-    if (HAL_ETH_ReadPHYRegister(&heth, 0, 0, &phyreg) == HAL_OK) {
-        phyreg |= 0x8000;
-        HAL_ETH_WritePHYRegister(&heth, 0, 0, phyreg);
-        HAL_Delay(50); // Wait for PHY reset
-    }
-
-    ETH_MACConfigTypeDef MACConf;
-    if (HAL_ETH_GetMACConfig(&heth, &MACConf) == HAL_OK) {
-        MACConf.DuplexMode = ETH_FULLDUPLEX_MODE;
-        MACConf.Speed = ETH_SPEED_100M;
-        HAL_ETH_SetMACConfig(&heth, &MACConf);
-    }
-
-    ETH_MACFilterConfigTypeDef filterConf;
-    if (HAL_ETH_GetMACFilterConfig(&heth, &filterConf) == HAL_OK) {
-        filterConf.PromiscuousMode = ENABLE;
-        HAL_ETH_SetMACFilterConfig(&heth, &filterConf);
-    }
-
-    // MAC start moved to WaitForLink() to ensure stable RMII clock
-    return true;
-}
 
 #include "lwip/pbuf.h"
 #include "lwip/netif.h"
 #include "lwip/err.h"
 
+// ── DMA buffer configuration ──────────────────────────────────────────────
+#ifndef ETH_RX_DESC_CNT
+#define ETH_RX_DESC_CNT  4
+#endif
+#ifndef ETH_TX_DESC_CNT
+#define ETH_TX_DESC_CNT  4
+#endif
+#ifndef ETH_MAX_PAYLOAD
+#define ETH_MAX_PAYLOAD  1536
+#endif
+
+__attribute__((aligned(32), section(".eth_rx_buffers")))
+    ETH_DMADescTypeDef DMARxDscrTab[ETH_RX_DESC_CNT];
+
+__attribute__((aligned(32), section(".eth_tx_buffers")))
+    ETH_DMADescTypeDef DMATxDscrTab[ETH_TX_DESC_CNT];
+
+__attribute__((aligned(32), section(".eth_rx_buffers")))
+    uint8_t Rx_Buff[ETH_RX_DESC_CNT][ETH_MAX_PAYLOAD];
+
+__attribute__((aligned(32), section(".eth_tx_buffers")))
+    uint8_t Tx_Buff[ETH_TX_DESC_CNT][ETH_MAX_PAYLOAD];
+
+// ── IRQ forwarding ─────────────────────────────────────────────────────────
+static ETH_HandleTypeDef* g_heth = nullptr;
+
+extern "C" void ETH_IRQHandler(void) {
+    if (g_heth) {
+        HAL_ETH_IRQHandler(g_heth);
+        // Clear all DMA status flags to prevent hardware IRQ storms
+        g_heth->Instance->DMACSR = g_heth->Instance->DMACSR;
+    }
+}
+
+extern "C" void HAL_ETH_TxCpltCallback(ETH_HandleTypeDef *heth) {
+    (void)heth;
+}
+
+extern "C" void HAL_ETH_RxCpltCallback(ETH_HandleTypeDef *heth) {
+    (void)heth;
+}
+
+extern "C" void HAL_ETH_ErrorCallback(ETH_HandleTypeDef *heth) {
+    (void)heth;
+}
+
+// ── RX allocation callback (called from HAL inside ProcessRx) ──────────────
 static uint32_t rx_alloc_idx = 0;
 
-extern "C" void HAL_ETH_RxAllocateCallback(uint8_t **buff) {
+extern "C" void HAL_ETH_RxAllocateCallback(uint8_t** buff) {
     *buff = Rx_Buff[rx_alloc_idx];
     rx_alloc_idx = (rx_alloc_idx + 1) % ETH_RX_DESC_CNT;
 }
 
-bool Stm32H7Eth::Transmit(struct pbuf *p) {
-    if (p->tot_len > ETH_MAX_PAYLOAD) return false;
+// ── RX link callback (called from HAL inside ProcessRx) ────────────────────
+extern "C" void HAL_ETH_RxLinkCallback(void** pStart, void** pEnd,
+                                        uint8_t* buff, uint16_t Length) {
+    SCB_InvalidateDCache_by_Addr((uint32_t*)buff, Length);
 
-    pbuf_copy_partial(p, Tx_Buff[0], p->tot_len, 0);
+    struct pbuf* p = pbuf_alloc(PBUF_RAW, Length, PBUF_POOL);
+    if (p) pbuf_take(p, buff, Length);
 
-    uint32_t alignedAddr = (uint32_t)Tx_Buff[0] & ~0x1FUL;
-    uint32_t alignedSize = (((uint32_t)Tx_Buff[0] - alignedAddr) + p->tot_len + 0x1FUL) & ~0x1FUL;
-    SCB_CleanDCache_by_Addr((uint32_t *)alignedAddr, alignedSize);
+    struct pbuf** ppStart = (struct pbuf**)pStart;
+    struct pbuf** ppEnd   = (struct pbuf**)pEnd;
 
-    ETH_BufferTypeDef Txbuffer;
-    Txbuffer.buffer = Tx_Buff[0];
-    Txbuffer.len = p->tot_len;
-    Txbuffer.next = NULL;
-
-    ETH_TxPacketConfig TxConfig;
-    memset(&TxConfig, 0, sizeof(TxConfig));
-    TxConfig.Attributes = ETH_TX_PACKETS_FEATURES_CRCPAD; 
-    TxConfig.CRCPadCtrl = ETH_CRC_PAD_INSERT;
-    TxConfig.Length = p->tot_len;
-    TxConfig.TxBuffer = &Txbuffer;
-
-    // Clean the Tx descriptors in cache so DMA sees the changes
-    SCB_CleanDCache_by_Addr((uint32_t *)DMATxDscrTab, sizeof(DMATxDscrTab));
-
-    printf("ETH: Tx %d bytes\r\n", p->tot_len);
-
-    if (HAL_ETH_Transmit(&heth, &TxConfig, 100) != HAL_OK) {
-        printf("ETH: Tx failed! Err=0x%lX, DMAErr=0x%lX, State=0x%lX\r\n", heth.ErrorCode, heth.DMAErrorCode, heth.gState);
-        return false;
-    }
-    printf("ETH: Tx done\r\n");
-    return true;
-}
-
-namespace net {
-    extern struct netif gnetif;
-}
-
-struct RxPacketInfo {
-    uint8_t* buff;
-    uint16_t length;
-};
-extern "C" void HAL_ETH_RxLinkCallback(void **pStart, void **pEnd, uint8_t *buff, uint16_t Length) {
-    // Invalidate the cache for the buffer the DMA just wrote to
-    SCB_InvalidateDCache_by_Addr((uint32_t *)buff, Length);
-
-    struct pbuf *p = pbuf_alloc(PBUF_RAW, Length, PBUF_POOL);
-    if (p) {
-        pbuf_take(p, buff, Length);
-    }
-
-    struct pbuf **ppStart = (struct pbuf **)pStart;
-    struct pbuf **ppEnd = (struct pbuf **)pEnd;
-    
-    if (p == NULL) return; // Dropped packet (out of memory)
+    if (!p) return; // out of memory, drop packet
 
     if (!*ppStart) {
         *ppStart = p;
@@ -264,103 +79,193 @@ extern "C" void HAL_ETH_RxLinkCallback(void **pStart, void **pEnd, uint8_t *buff
         (*ppEnd)->next = p;
     }
     *ppEnd = p;
-    
-    for (struct pbuf *q = *ppStart; q != NULL; q = q->next) {
+
+    for (struct pbuf* q = *ppStart; q != nullptr; q = q->next) {
         q->tot_len += Length;
     }
 }
 
-void Stm32H7Eth::ProcessRx() {
-    struct pbuf *p = NULL;
-    
-    // Invalidate Rx descriptors so CPU sees updates from DMA
-    SCB_InvalidateDCache_by_Addr((uint32_t *)DMARxDscrTab, sizeof(DMARxDscrTab));
-
-    while (HAL_ETH_ReadData(&heth, (void **)&p) == HAL_OK) {
-        if (p != NULL) {
-            printf("ETH: Rx %d bytes\r\n", p->tot_len);
-            if (net::gnetif.input(p, &net::gnetif) != ERR_OK) {
-                pbuf_free(p);
-            }
-        }
-        // Descriptors are automatically updated by HAL_ETH_ReadData, clean them for DMA
-        SCB_CleanDCache_by_Addr((uint32_t *)DMARxDscrTab, sizeof(DMARxDscrTab));
-    }
-}
-
-
-
-extern "C" void HAL_ETH_TxFreeCallback(uint32_t *buff) {
+// ── TX free callback ────────────────────────────────────────────────────────
+extern "C" void HAL_ETH_TxFreeCallback(uint32_t* buff) {
     (void)buff;
 }
 
-bool Stm32H7Eth::IsLinkUp() {
-    uint32_t phyreg1 = 0;
-    if (HAL_ETH_ReadPHYRegister(&heth, 0, 1, &phyreg1) == HAL_OK) {
-        return ((phyreg1 & 0x0004) != 0);
+// ── Constructor / Destructor ────────────────────────────────────────────────
+Stm32H7Eth::Stm32H7Eth(const Stm32H7EthConfig& cfg, IPhy& phy)
+    : cfg_(cfg), phy_(phy) {}
+
+Stm32H7Eth::~Stm32H7Eth() {
+    HAL_ETH_DeInit(&heth_);
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────
+bool Stm32H7Eth::Init() {
+    // Clock SRAMAHB so DMA buffers at 0x30000000 are accessible
+    __HAL_RCC_SRAM1_CLK_ENABLE();
+
+    // Configure MPU: SRAMAHB region non-cacheable for Ethernet DMA
+    SCB_CleanInvalidateDCache();
+    __DSB();
+    __ISB();
+
+    // Fill HAL handle
+    memset(&heth_, 0, sizeof(heth_));
+    heth_.Instance          = ETH;
+    heth_.Init.MACAddr      = cfg_.mac_addr;
+    heth_.Init.MediaInterface = static_cast<ETH_MediaInterfaceTypeDef>(cfg_.media_interface);
+    heth_.Init.TxDesc       = DMATxDscrTab;
+    heth_.Init.RxDesc       = DMARxDscrTab;
+    heth_.Init.RxBuffLen    = ETH_MAX_PAYLOAD;
+
+    g_heth = &heth_;
+
+    SCB_CleanInvalidateDCache(); // flush before DMA ownership
+
+    if (HAL_ETH_Init(&heth_) != HAL_OK) {
+        LOG_ERR("HAL_ETH_Init failed\r\n");
+        return false;
     }
-    return false;
+
+    // Disable ETH NVIC IRQ since we process RX and TX via polling in FreeRTOS tasks
+    HAL_NVIC_DisableIRQ(ETH_IRQn);
+
+    // Delegate PHY soft-reset to IPhy
+    if (!phy_.Init(&heth_)) {
+        LOG_ERR("PHY Init failed\r\n");
+        return false;
+    }
+
+    return true;
 }
 
-uint32_t Stm32H7Eth::GetPhyId() {
-    uint32_t phyreg2 = 0;
-    uint32_t phyreg3 = 0;
-    // LAN8742 PHY address on Nucleo-H7S3L8 is usually 0
-    if (HAL_ETH_ReadPHYRegister(&heth, 0, 2, &phyreg2) != HAL_OK) return 0xFFFFFFFF;
-    if (HAL_ETH_ReadPHYRegister(&heth, 0, 3, &phyreg3) != HAL_OK) return 0xFFFFFFFF;
-    return (phyreg2 << 16) | phyreg3;
-}
-
+// ── WaitForLink ─────────────────────────────────────────────────────────────
 bool Stm32H7Eth::WaitForLink(uint32_t timeout_ms) {
     uint32_t tickstart = HAL_GetTick();
-    uint32_t phyreg1 = 0;
+
     while ((HAL_GetTick() - tickstart) < timeout_ms) {
-        if (HAL_ETH_ReadPHYRegister(&heth, 0, 1, &phyreg1) == HAL_OK) {
-            // Wait for both Link Up (bit 2) AND Auto-Negotiation Complete (bit 5)
-            if ((phyreg1 & 0x0004) != 0 && (phyreg1 & 0x0020) != 0) { 
-                printf("\r\n--- PHY REGISTERS DUMP ---\r\n");
-                for (int i = 0; i <= 31; i++) {
-                    uint32_t val = 0;
-                    if (HAL_ETH_ReadPHYRegister(&heth, 0, i, &val) == HAL_OK) {
-                        printf("Reg %02d: 0x%04lX\r\n", i, val);
-                    }
-                }
-                printf("--------------------------\r\n");
-                
-                // Start MAC now that the PHY clock is fully stable
-                HAL_ETH_Start(&heth);
-                
-                return true;
+        if (phy_.IsLinkUp(&heth_)) {
+            // Read negotiated speed / duplex from PHY
+            uint32_t speed = ETH_SPEED_100M;
+            uint32_t duplex = ETH_FULLDUPLEX_MODE;
+            phy_.GetLinkConfig(&heth_, speed, duplex);
+
+            ETH_MACConfigTypeDef macConf;
+            if (HAL_ETH_GetMACConfig(&heth_, &macConf) == HAL_OK) {
+                macConf.Speed      = speed;
+                macConf.DuplexMode = duplex;
+                HAL_ETH_SetMACConfig(&heth_, &macConf);
             }
+
+            // Dump PHY registers only at DEBUG level
+            LOG_DBG("--- PHY REGISTERS ---\r\n");
+            for (int i = 0; i <= 31; i++) {
+                uint32_t val = 0;
+                if (HAL_ETH_ReadPHYRegister(&heth_, 0, i, &val) == HAL_OK) {
+                    LOG_DBG("Reg %02d: 0x%04lX\r\n", i, val);
+                }
+            }
+            LOG_DBG("---------------------\r\n");
+
+            HAL_ETH_Start(&heth_);
+
+            // Enable promiscuous mode after MAC is started
+            ETH_MACFilterConfigTypeDef filterConf;
+            if (HAL_ETH_GetMACFilterConfig(&heth_, &filterConf) == HAL_OK) {
+                filterConf.PromiscuousMode = ENABLE;
+                HAL_ETH_SetMACFilterConfig(&heth_, &filterConf);
+            }
+
+            return true;
         }
         HAL_Delay(10);
     }
     return false;
 }
 
+// ── IsLinkUp ─────────────────────────────────────────────────────────────────
+bool Stm32H7Eth::IsLinkUp() {
+    return phy_.IsLinkUp(&heth_);
+}
+
+// ── GetPhyId ─────────────────────────────────────────────────────────────────
+uint32_t Stm32H7Eth::GetPhyId() {
+    return phy_.GetId(&heth_);
+}
+
+// ── Transmit ─────────────────────────────────────────────────────────────────
+static uint32_t tx_idx = 0;
+
+bool Stm32H7Eth::Transmit(struct pbuf* p) {
+    if (p->tot_len > ETH_MAX_PAYLOAD) return false;
+
+    uint8_t* buf = Tx_Buff[tx_idx];
+    tx_idx = (tx_idx + 1) % ETH_TX_DESC_CNT;
+
+    pbuf_copy_partial(p, buf, p->tot_len, 0);
+
+    uint32_t alignedAddr = (uint32_t)buf & ~0x1FUL;
+    uint32_t alignedSize = (((uint32_t)buf - alignedAddr) + p->tot_len + 0x1FUL) & ~0x1FUL;
+    SCB_CleanDCache_by_Addr((uint32_t*)alignedAddr, alignedSize);
+
+    ETH_BufferTypeDef txBuf;
+    txBuf.buffer = buf;
+    txBuf.len    = p->tot_len;
+    txBuf.next   = nullptr;
+
+    ETH_TxPacketConfig txCfg;
+    memset(&txCfg, 0, sizeof(txCfg));
+    txCfg.Attributes  = ETH_TX_PACKETS_FEATURES_CRCPAD;
+    txCfg.CRCPadCtrl  = ETH_CRC_PAD_INSERT;
+    txCfg.Length      = p->tot_len;
+    txCfg.TxBuffer    = &txBuf;
+
+    SCB_CleanDCache_by_Addr((uint32_t*)DMATxDscrTab, sizeof(DMATxDscrTab));
+
+    LOG_DBG("ETH Tx %d bytes\r\n", p->tot_len);
+
+    if (HAL_ETH_Transmit(&heth_, &txCfg, 100) != HAL_OK) {
+        LOG_ERR("ETH Tx failed Err=0x%lX DMAErr=0x%lX State=0x%lX\r\n",
+                heth_.ErrorCode, heth_.DMAErrorCode, heth_.gState);
+        return false;
+    }
+    return true;
+}
+
+// ── ProcessRx ────────────────────────────────────────────────────────────────
+extern struct netif* g_netif_ptr; // defined in ethernetif.cpp
+
+void Stm32H7Eth::ProcessRx() {
+    struct pbuf* p = nullptr;
+
+    SCB_InvalidateDCache_by_Addr((uint32_t*)DMARxDscrTab, sizeof(DMARxDscrTab));
+
+    while (HAL_ETH_ReadData(&heth_, (void**)&p) == HAL_OK) {
+        if (p != nullptr) {
+            LOG_DBG("ETH Rx %d bytes\r\n", p->tot_len);
+            if (g_netif_ptr && g_netif_ptr->input(p, g_netif_ptr) != ERR_OK) {
+                pbuf_free(p);
+            }
+        }
+        SCB_InvalidateDCache_by_Addr((uint32_t*)DMARxDscrTab, sizeof(DMARxDscrTab));
+    }
+}
+
+// ── GetMacAddress ─────────────────────────────────────────────────────────────
 void Stm32H7Eth::GetMacAddress(uint8_t* mac_addr) {
-    mac_addr[0] = 0x00;
-    mac_addr[1] = 0x80;
-    mac_addr[2] = 0xE1;
-    mac_addr[3] = 0x11;
-    mac_addr[4] = 0x22;
-    mac_addr[5] = 0x33;
+    for (int i = 0; i < 6; i++) mac_addr[i] = cfg_.mac_addr[i];
 }
 
-void Stm32H7Eth::Error_Handler() {
-    while (1) { }
-}
-
+// ── PrintMmcCounters ──────────────────────────────────────────────────────────
 void Stm32H7Eth::PrintMmcCounters() {
-    printf("--- MAC MMC Counters ---\r\n");
-    printf("Desc0.DESC3: 0x%08lX\r\n", DMARxDscrTab[0].DESC3);
-    printf("Desc Addr: %p, Buff Addr: %p\r\n", (void*)DMARxDscrTab, (void*)Rx_Buff);
-    printf("MACCR: 0x%08lX\r\n", heth.Instance->MACCR);
-    printf("DMACSR: 0x%08lX\r\n", heth.Instance->DMACSR);
-    printf("MMCCR: 0x%08lX\r\n", heth.Instance->MMCCR);
-    printf("Rx CRC Error: %lu\r\n", heth.Instance->MMCRCRCEPR);
-    printf("Rx Alignment Error: %lu\r\n", heth.Instance->MMCRAEPR);
-    printf("Rx Good Unicast: %lu\r\n", heth.Instance->MMCRUPGR);
-    printf("Rx Packets total (Good/Bad): %lu\r\n", heth.Instance->MMCRLPITCR);
-    printf("------------------------\r\n");
+    LOG_INFO("--- MAC MMC Counters ---\r\n");
+    LOG_INFO("Desc0.DESC3: 0x%08lX\r\n",   DMARxDscrTab[0].DESC3);
+    LOG_INFO("Desc Addr: %p  Buff Addr: %p\r\n", (void*)DMARxDscrTab, (void*)Rx_Buff);
+    LOG_INFO("MACCR:  0x%08lX\r\n",         heth_.Instance->MACCR);
+    LOG_INFO("DMACSR: 0x%08lX\r\n",         heth_.Instance->DMACSR);
+    LOG_INFO("MMCCR:  0x%08lX\r\n",         heth_.Instance->MMCCR);
+    LOG_INFO("Rx CRC Error:       %lu\r\n", heth_.Instance->MMCRCRCEPR);
+    LOG_INFO("Rx Alignment Error: %lu\r\n", heth_.Instance->MMCRAEPR);
+    LOG_INFO("Rx Good Unicast:    %lu\r\n", heth_.Instance->MMCRUPGR);
+    LOG_INFO("Rx Packets total:   %lu\r\n", heth_.Instance->MMCRLPITCR);
+    LOG_INFO("------------------------\r\n");
 }

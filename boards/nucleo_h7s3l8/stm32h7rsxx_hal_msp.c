@@ -216,4 +216,99 @@ void HAL_XSPI_MspDeInit(XSPI_HandleTypeDef* hxspi)
 
 /* USER CODE BEGIN 1 */
 
+/**
+ * @brief Ethernet MSP Init — Nucleo-H7S3L8 board.
+ *
+ * Configures PLL3 for 50 MHz ETH PHY clock, enables ETH peripheral clocks,
+ * and initialises all RMII GPIO pins for the onboard LAN8742A PHY.
+ */
+void HAL_ETH_MspInit(ETH_HandleTypeDef* ethHandle)
+{
+    if (ethHandle->Instance == ETH)
+    {
+        GPIO_InitTypeDef GPIO_InitStruct = {0};
+        RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+
+        /* Configure PLL3 to produce 50 MHz for ETH PHY reference clock */
+        RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+        RCC_OscInitStruct.OscillatorType  = RCC_OSCILLATORTYPE_NONE;
+        RCC_OscInitStruct.PLL3.PLLState   = RCC_PLL_ON;
+        RCC_OscInitStruct.PLL3.PLLSource  = RCC_PLLSOURCE_HSI;
+        RCC_OscInitStruct.PLL3.PLLM       = 4;
+        RCC_OscInitStruct.PLL3.PLLN       = 25;
+        RCC_OscInitStruct.PLL3.PLLP       = 2;
+        RCC_OscInitStruct.PLL3.PLLQ       = 2;
+        RCC_OscInitStruct.PLL3.PLLR       = 2;
+        RCC_OscInitStruct.PLL3.PLLS       = 8;
+        RCC_OscInitStruct.PLL3.PLLT       = 2;
+        RCC_OscInitStruct.PLL3.PLLFractional = 0;
+        HAL_RCC_OscConfig(&RCC_OscInitStruct);
+
+        /* Route ETH ref clock from PHY and PHY clock from PLL3S */
+        PeriphClkInit.PeriphClockSelection  = RCC_PERIPHCLK_ETH1REF | RCC_PERIPHCLK_ETH1PHY;
+        PeriphClkInit.Eth1RefClockSelection = RCC_ETH1REFCLKSOURCE_PHY;
+        PeriphClkInit.Eth1PhyClockSelection = RCC_ETH1PHYCLKSOURCE_PLL3S;
+        HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit);
+
+        /* Enable ETH peripheral clocks */
+        __HAL_RCC_ETH1MAC_CLK_ENABLE();
+        __HAL_RCC_ETH1TX_CLK_ENABLE();
+        __HAL_RCC_ETH1RX_CLK_ENABLE();
+
+        /* Enable GPIO port clocks */
+        __HAL_RCC_GPIOA_CLK_ENABLE();
+        __HAL_RCC_GPIOB_CLK_ENABLE();
+        __HAL_RCC_GPIOD_CLK_ENABLE();
+        __HAL_RCC_GPIOG_CLK_ENABLE();
+        __HAL_RCC_SBS_CLK_ENABLE();
+
+        /* PD4 — ETH_PHY_INTN */
+        GPIO_InitStruct.Pin       = GPIO_PIN_4;
+        GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
+        GPIO_InitStruct.Pull      = GPIO_NOPULL;
+        GPIO_InitStruct.Speed     = GPIO_SPEED_FREQ_HIGH;
+        GPIO_InitStruct.Alternate = GPIO_AF11_ETH;
+        HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+
+        /* PB6 — ETH_RMII_REF_CLK */
+        GPIO_InitStruct.Pin = GPIO_PIN_6;
+        HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+        /* PG4,5,6,11,12,13 — RXD0, RXD1, MDC, TX_EN, TXD1, TXD0 */
+        GPIO_InitStruct.Pin = GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 |
+                              GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_13;
+        HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
+
+        /* PA2 — ETH_MDIO, PA7 — ETH_RMII_CRS_DV */
+        GPIO_InitStruct.Pin = GPIO_PIN_2 | GPIO_PIN_7;
+        HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+        /* ETH interrupt — priority 5, sub-priority 0 */
+        HAL_NVIC_SetPriority(ETH_IRQn, 5, 0);
+        HAL_NVIC_EnableIRQ(ETH_IRQn);
+    }
+}
+
+/**
+ * @brief Ethernet MSP DeInit — Nucleo-H7S3L8 board.
+ */
+void HAL_ETH_MspDeInit(ETH_HandleTypeDef* ethHandle)
+{
+    if (ethHandle->Instance == ETH)
+    {
+        __HAL_RCC_ETH1MAC_CLK_DISABLE();
+        __HAL_RCC_ETH1TX_CLK_DISABLE();
+        __HAL_RCC_ETH1RX_CLK_DISABLE();
+
+        HAL_GPIO_DeInit(GPIOD, GPIO_PIN_4);
+        HAL_GPIO_DeInit(GPIOB, GPIO_PIN_6);
+        HAL_GPIO_DeInit(GPIOG, GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 |
+                               GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_13);
+        HAL_GPIO_DeInit(GPIOA, GPIO_PIN_2 | GPIO_PIN_7);
+
+        HAL_NVIC_DisableIRQ(ETH_IRQn);
+    }
+}
+
 /* USER CODE END 1 */
+

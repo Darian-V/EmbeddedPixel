@@ -76,12 +76,9 @@ if(NOT APP STREQUAL "bootloader")
     add_subdirectory(vendor)
     
     # Network Configuration
-    set(NET_USE_DHCP        OFF  CACHE BOOL   "Enable DHCP (falls back to static if no server)")
-    set(NET_STATIC_IP_ADDR  "192, 168, 1, 100" CACHE STRING "Static/fallback IP address")
-    set(NET_STATIC_NETMASK  "255, 255, 255, 0" CACHE STRING "Static/fallback subnet mask")
-    set(NET_STATIC_GATEWAY  "192, 168, 1, 1"   CACHE STRING "Static/fallback gateway")
-    set(NET_NODE_ID         "1"             CACHE STRING "Unique node ID (1-65535)")
-    set(NET_DHCP_TIMEOUT_MS "5000"          CACHE STRING "DHCP timeout before static fallback (ms)")
+    set(NET_LOG_LEVEL "2" CACHE STRING "Net log verbosity: 0=off 1=err 2=info 3=debug" FORCE)
+    target_compile_definitions(${EXECUTABLE_NAME} PRIVATE NET_LOG_LEVEL=2)
+
 
     configure_file(
         ${CMAKE_SOURCE_DIR}/cmake/net_config.h.in
@@ -89,6 +86,7 @@ if(NOT APP STREQUAL "bootloader")
     )
     target_include_directories(${EXECUTABLE_NAME} PRIVATE ${CMAKE_BINARY_DIR})
 endif()
+
 
 # Print configuration
 message(STATUS "----------------------------------------")

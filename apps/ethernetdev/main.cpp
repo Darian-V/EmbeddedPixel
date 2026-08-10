@@ -4,27 +4,40 @@
 #include "console.h"
 #include "NetManager.h"
 #include "Stm32H7Eth.h"
+#include "Lan8742Phy.h"
+#include "stm32h7rsxx_hal.h"
 #include <stdio.h>
 
 int main(void) {
-    // 1. Initialize the board (hardware-specific, opaque to us)
     Board_Init();
     console_init();
 
-    printf("\r\n=== EthernetDev Application Started! ===\r\n");
+    printf("\r\n=== EthernetDev ===\r\n");
 
-    // 2. Get board resources — pin/clock setup happens inside Board_GetLed()
     static hal::IGpio& led = Board_GetLed();
-
-    // 3. Instantiate application components
     static app::BlinkTask blinky(led, 500);
     static stm32::FreeRtosThread blinkThread(blinky, "BlinkTask", 256, 3);
 
-    extern IEth* g_eth_driver; // from ethernetif.cpp
-    static Stm32H7Eth ethDriver;
-    g_eth_driver = &ethDriver;
+    // ── Ethernet driver configuration ──────────────────────────────────────
+    static Lan8742Phy phy(0);  // PHY address 0 on Nucleo-H7S3L8
 
-    static net::NetManager netMan(ethDriver);
+    static const Stm32H7EthConfig ethCfg = {
+        .mac_addr        = {0x00, 0x80, 0xE1, 0x11, 0x22, 0x33},
+        .media_interface = HAL_ETH_RMII_MODE,
+    };
+
+    static Stm32H7Eth ethDriver(ethCfg, phy);
+
+    // ── IP stack configuration ─────────────────────────────────────────────
+    static net::IpConfig ipCfg;
+    ipCfg.mode            = net::IpMode::DHCP_WITH_FALLBACK;
+    ipCfg.static_ip       = net::IP4_MAKE(192, 168, 1, 111);
+    ipCfg.netmask         = net::IP4_MAKE(255, 255, 255, 0);
+    ipCfg.gateway         = net::IP4_MAKE(192, 168, 1, 1);
+    ipCfg.dhcp_timeout_ms = 10000;
+    ipCfg.hostname        = "embeddedpixel";
+
+    static net::NetManager netMan(ethDriver, ipCfg);
     static stm32::FreeRtosThread netThread(netMan, "NetManager", 1024, 4);
 
     blinkThread.start();
@@ -32,6 +45,5 @@ int main(void) {
 
     vTaskStartScheduler();
 
-    // Should never reach here
-    return 0;
+    while (1) {}
 }

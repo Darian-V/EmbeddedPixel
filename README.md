@@ -8,7 +8,7 @@ The architecture strictly decouples application logic from hardware specifics by
 *   **Language:** C++17 (for zero-cost abstractions and RAII)
 *   **Build System:** CMake (Multi-target architecture, MinGW Makefiles generator)
 *   **Execution Model:** FreeRTOS (Abstracted via OSAL)
-*   **Networking:** lwIP (Abstracted via `NetManager` / `IEth`)
+*   **Networking:** lwIP (Abstracted via `NetManager` / `IEth` / `IPhy`)
 *   **Supported MCUs:** STM32H7 (Specifically STM32H7RS)
 *   **Supported Boards:** Nucleo-H7S3L8, Custom PCBAs
 *   **Memory Execution:** Internal Flash (Bootloader) + Octal-SPI External Flash (Application XIP)
@@ -34,11 +34,11 @@ The repository is structured to enforce strict dependency rules. Higher layers c
 
 *   `apps/`: **Application Layer.** Contains `main.cpp` entry points for different applications.
 *   `boards/`: **Board Support Packages (BSPs).** PCBA-specific configurations. Each board defines its own oscillators, voltage regulators, pin muxing (`board_init.cpp`), linker scripts, and board resource accessors (e.g. `Board_GetLed()`).
-*   `components/`: **Reusable Modules.** Hardware-independent business logic, algorithms, and RTOS Tasks (e.g. `BlinkTask`, `NetManager`).
+*   `components/`: **Reusable Modules.** Hardware-independent business logic, algorithms, RTOS Tasks (`BlinkTask`), and runtime network orchestration (`NetManager`).
 *   `core/`:
     *   `osal/`: **OS Abstraction Layer.** C++ interfaces wrapping the FreeRTOS API (`Thread`, `Mutex`).
-    *   `hal/`: **Custom HAL.** Pure virtual C++ interfaces for peripherals (`IGpio`, `IUart`, `IEth`, etc.).
-*   `targets/`: **MCU Target Layer.** The implementation of the `core/hal/` using specific vendor SDKs. Contains MCU startup code, interrupt handlers, and lwIP port files.
+    *   `hal/`: **Custom HAL.** Pure virtual C++ interfaces for peripherals (`IGpio`, `IUart`, `IEth`, `IPhy`, etc.).
+*   `targets/`: **MCU Target Layer.** The implementation of the `core/hal/` using specific vendor SDKs. Contains MCU startup code, PHY abstraction drivers (`Lan8742Phy`), Cortex-M7 diagnostic fault handlers, interrupt handlers, and lwIP port files.
 *   `vendor/`: **Vendor SDK.** STM32Cube libraries, CMSIS, ST ExtMem Manager, FreeRTOS, and lwIP source code.
 
 ## Prerequisites
@@ -91,31 +91,36 @@ Output: `apps/ethernetdev/programming_files/ethernetdev_nucleo_h7s3l8.bin`
 
 > **Artifact convention:** After each build, `.bin` and `.hex` files are automatically copied into `apps/<app>/programming_files/`. These files **are tracked by git** and pushed to the remote — so the latest flashable binary for each app is always available directly from the repository without needing to rebuild. Intermediate build artifacts (`build/`, `*.elf`, `*.map`) remain gitignored.
 
-### Network Configuration
+### Network Architecture & Configuration
 
-When building a non-bootloader application, network parameters can be overridden at configure time:
+Networking is managed at runtime by `NetManager`, which accepts an `IpConfig` structure supporting:
+- **`net::IpMode::DHCP`**: Pure dynamic IP assignment via DHCP.
+- **`net::IpMode::DHCP_WITH_FALLBACK`**: Dynamic IP assignment with automatic fallback to a static IP if the DHCP server does not acknowledge within a configurable timeout (`dhcp_timeout_ms`).
+- **`net::IpMode::STATIC`**: Pure static IP configuration.
+
+```cpp
+static net::IpConfig ipCfg;
+ipCfg.mode            = net::IpMode::DHCP_WITH_FALLBACK;
+ipCfg.static_ip       = net::IP4_MAKE(192, 168, 1, 111);
+ipCfg.netmask         = net::IP4_MAKE(255, 255, 255, 0);
+ipCfg.gateway         = net::IP4_MAKE(192, 168, 1, 1);
+ipCfg.dhcp_timeout_ms = 10000;
+ipCfg.hostname        = "embeddedpixel";
+
+static net::NetManager netMan(ethDriver, ipCfg);
+```
+
+Build-time network defaults can also be passed via CMake:
 
 | CMake Variable | Default | Description |
 |---|---|---|
-| `NET_USE_DHCP` | `OFF` | Enable DHCP (falls back to static on timeout) |
+| `NET_LOG_LEVEL` | `2` | Net log verbosity: `0`=off, `1`=err, `2`=info, `3`=debug |
+| `NET_USE_DHCP` | `OFF` | Enable DHCP default |
 | `NET_STATIC_IP_ADDR` | `192, 168, 1, 100` | Static/fallback IP (byte-comma format) |
 | `NET_STATIC_NETMASK` | `255, 255, 255, 0` | Subnet mask |
 | `NET_STATIC_GATEWAY` | `192, 168, 1, 1` | Gateway |
 | `NET_NODE_ID` | `1` | Unique node ID (1–65535) |
 | `NET_DHCP_TIMEOUT_MS` | `5000` | DHCP timeout before static fallback (ms) |
-
-Example — enable DHCP with a custom node ID:
-```bash
-cmake -G "MinGW Makefiles" -S . -B build -DAPP=ethernetdev \
-      -DNET_USE_DHCP=ON \
-      -DNET_NODE_ID=42
-cmake --build build
-```
-
-Fixed port assignments (in `cmake/net_config.h.in`):
-- TCP command port: `4000`
-- UDP data port: `5000`
-- UDP discovery port: `3999`
 
 ### 3. Creating a New Application
 
@@ -149,8 +154,9 @@ hal::IGpio& Board_GetLed();
    - `CMakeLists.txt` — add sources, include path, linker script selection
 
 2. **If using a new MCU family**, create `targets/<new_target>/` with:
-   - Concrete HAL implementations (`<Mcu>Gpio.cpp`, `<Mcu>Eth.cpp`, etc.)
+   - Concrete HAL implementations (`<Mcu>Gpio.cpp`, `<Mcu>Eth.cpp`, `<Phy>Phy.cpp`, etc.)
    - Startup file and system init (`.s`, `.c`)
+   - Hardware diagnostic fault handlers (`fault_handler.cpp`)
    - `FreeRTOSConfig.h` tuned for the target
    - `CMakeLists.txt` — compiler flags, CPU arch, HAL sources
 
@@ -166,6 +172,7 @@ hal::IGpio& Board_GetLed();
 4. **`main.cpp` — unchanged ✅**
 
 ## C++ & FreeRTOS "Gotchas"
+- **ARM Cortex-M7 Memory Alignment (`MEM_ALIGNMENT 4`):** In lwIP on ARM Cortex-M7 processors, `#define MEM_ALIGNMENT 4` MUST be set in `lwipopts.h`. Without 4-byte memory alignment, lwIP heap allocations return 2-byte aligned addresses, which trigger an immediate Cortex-M7 Unaligned Access HardFault (`SCB->CFSR = 0x01000000`) when executing 64-bit `STRD`/`LDRD` instructions.
 - **MSP Reset Bug:** On Cortex-M processors, FreeRTOS resets the Main Stack Pointer (MSP) when the scheduler starts. **NEVER** allocate hardware drivers or RTOS Tasks on the local `main()` stack. Always mark them as `static` or allocate them globally so they are placed in `.bss` and survive the scheduler boot sequence.
 - **Linker Specs:** Always build with `--specs=nano.specs --specs=nosys.specs` to avoid linker errors for missing standard library syscalls (`_close`, `_read`). The resulting `_close is not implemented` linker warnings are expected and benign.
 - **Binary Bloat:** Always compile with `-fno-exceptions -fno-rtti` in a bare-metal environment to prevent massive standard library bloat that can easily overflow internal FLASH.
