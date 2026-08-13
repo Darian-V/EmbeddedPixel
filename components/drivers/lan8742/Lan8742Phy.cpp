@@ -8,6 +8,9 @@ void Lan8742Phy::attachMdio(hal::IMdio& mdio) {
     mdio_ = &mdio;
 }
 
+extern "C" void HAL_Delay(uint32_t Delay);
+extern "C" uint32_t HAL_GetTick(void);
+
 bool Lan8742Phy::init() {
     if (!mdio_) return false;
     uint16_t reg = 0;
@@ -21,23 +24,22 @@ bool Lan8742Phy::init() {
     mdio_->write(phy_addr_, REG_BMCR, reg);
 
     // Wait up to 500 ms for reset bit to self-clear
-    // Note: Using a simple busy-wait loop. The caller should ensure
-    // a system tick is running before calling init().
-    for (int i = 0; i < 50; i++) {
-        // Simple delay — approximately 10ms per iteration
-        for (volatile int j = 0; j < 100000; j++) {}
+    uint32_t tick = HAL_GetTick();
+    do {
+        HAL_Delay(10);
         if (!mdio_->read(phy_addr_, REG_BMCR, reg)) {
             LOG_ERR("LAN8742: BMCR poll failed\r\n");
             return false;
         }
-        if (!(reg & BMCR_RESET)) {
-            LOG_INFO("LAN8742: Init OK (PHY addr %u)\r\n", phy_addr_);
-            return true;
-        }
+    } while ((reg & BMCR_RESET) && (HAL_GetTick() - tick < 500));
+
+    if (reg & BMCR_RESET) {
+        LOG_ERR("LAN8742: Reset timed out\r\n");
+        return false;
     }
 
-    LOG_ERR("LAN8742: Reset timed out\r\n");
-    return false;
+    LOG_INFO("LAN8742: Init OK (PHY addr %u)\r\n", phy_addr_);
+    return true;
 }
 
 bool Lan8742Phy::isLinkUp() {
