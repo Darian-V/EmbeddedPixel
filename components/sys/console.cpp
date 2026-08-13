@@ -8,6 +8,8 @@ void console_init(hal::IUart& uart)
     g_console_uart = &uart;
 }
 
+extern "C" {
+
 // Redirect standard output through the registered UART
 int _write(int file, char *ptr, int len)
 {
@@ -17,3 +19,5 @@ int _write(int file, char *ptr, int len)
     }
     return len;
 }
+
+} // extern "C"
