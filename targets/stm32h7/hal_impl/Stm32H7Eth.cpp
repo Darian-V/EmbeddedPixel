@@ -91,8 +91,8 @@ extern "C" void HAL_ETH_TxFreeCallback(uint32_t* buff) {
 }
 
 // ── Constructor / Destructor ────────────────────────────────────────────────
-Stm32H7Eth::Stm32H7Eth(const Stm32H7EthConfig& cfg, IPhy& phy)
-    : cfg_(cfg), phy_(phy) {}
+Stm32H7Eth::Stm32H7Eth(const Stm32H7EthConfig& cfg, hal::IPhy& phy)
+    : cfg_(cfg), phy_(phy), mdio_(&heth_) {}
 
 Stm32H7Eth::~Stm32H7Eth() {
     HAL_ETH_DeInit(&heth_);
@@ -130,7 +130,8 @@ bool Stm32H7Eth::Init() {
     HAL_NVIC_DisableIRQ(ETH_IRQn);
 
     // Delegate PHY soft-reset to IPhy
-    if (!phy_.Init(&heth_)) {
+    phy_.attachMdio(mdio_);
+    if (!phy_.init()) {
         LOG_ERR("PHY Init failed\r\n");
         return false;
     }
@@ -143,11 +144,14 @@ bool Stm32H7Eth::WaitForLink(uint32_t timeout_ms) {
     uint32_t tickstart = HAL_GetTick();
 
     while ((HAL_GetTick() - tickstart) < timeout_ms) {
-        if (phy_.IsLinkUp(&heth_)) {
+        if (phy_.isLinkUp()) {
             // Read negotiated speed / duplex from PHY
-            uint32_t speed = ETH_SPEED_100M;
-            uint32_t duplex = ETH_FULLDUPLEX_MODE;
-            phy_.GetLinkConfig(&heth_, speed, duplex);
+            hal::EthSpeed halSpeed;
+            hal::EthDuplex halDuplex;
+            phy_.getLinkConfig(halSpeed, halDuplex);
+
+            uint32_t speed = (halSpeed == hal::EthSpeed::Speed100M) ? ETH_SPEED_100M : ETH_SPEED_10M;
+            uint32_t duplex = (halDuplex == hal::EthDuplex::Full) ? ETH_FULLDUPLEX_MODE : ETH_HALFDUPLEX_MODE;
 
             ETH_MACConfigTypeDef macConf;
             if (HAL_ETH_GetMACConfig(&heth_, &macConf) == HAL_OK) {
@@ -184,12 +188,12 @@ bool Stm32H7Eth::WaitForLink(uint32_t timeout_ms) {
 
 // ── IsLinkUp ─────────────────────────────────────────────────────────────────
 bool Stm32H7Eth::IsLinkUp() {
-    return phy_.IsLinkUp(&heth_);
+    return phy_.isLinkUp();
 }
 
 // ── GetPhyId ─────────────────────────────────────────────────────────────────
 uint32_t Stm32H7Eth::GetPhyId() {
-    return phy_.GetId(&heth_);
+    return phy_.getId();
 }
 
 // ── Transmit ─────────────────────────────────────────────────────────────────

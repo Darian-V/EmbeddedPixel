@@ -9,7 +9,7 @@
 int main(void) {
     // 1. Initialize the board hardware, clocks, and memory map
     Board_Init();
-    console_init();
+    console_init(Board_GetDebugUart());
 
     printf("\r\n=== Template Application Started ===\r\n");
 

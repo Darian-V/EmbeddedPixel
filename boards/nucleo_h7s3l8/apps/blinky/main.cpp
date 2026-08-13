@@ -9,7 +9,7 @@
 int main(void) {
     // 1. Initialize the board (Hardware specific)
     Board_Init();
-    console_init();
+    console_init(Board_GetDebugUart());
 
     printf("\r\n=== Blinky Application Started! ===\r\n");
 

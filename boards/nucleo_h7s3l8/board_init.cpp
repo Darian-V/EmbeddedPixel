@@ -1,6 +1,7 @@
 #include "board_init.h"
 #include "stm32h7rsxx_hal.h"
 #include "Stm32H7Gpio.h"
+#include "Stm32H7Uart.h"
 
 extern "C" void Error_Handler(void);
 
@@ -132,6 +133,22 @@ static void MPU_Config(void)
   HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
 }
 
+// ── Debug UART (USART3 on PD8/PD9) ─────────────────────────────────────────
+static stm32::h7::Stm32H7Uart g_debug_uart(USART3, 115200);
+
+static void DebugUart_GpioInit(void) {
+    __HAL_RCC_USART3_CLK_ENABLE();
+    __HAL_RCC_GPIOD_CLK_ENABLE();
+
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin = GPIO_PIN_8 | GPIO_PIN_9;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Alternate = GPIO_AF7_USART3;
+    HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+}
+
 void Board_Init() {
     // 0. Configure MPU and Caches for XIP
     MPU_Config();
@@ -147,6 +164,14 @@ void Board_Init() {
     // Update the SystemCoreClock variable to reflect the actual hardware clock
     // (set by the bootloader) so FreeRTOS calculates SysTick correctly!
     SystemCoreClockUpdate();
+
+    // 3. Initialize debug UART
+    DebugUart_GpioInit();
+    g_debug_uart.init();
+}
+
+hal::IUart& Board_GetDebugUart() {
+    return g_debug_uart;
 }
 
 // Nucleo-H7S3L8: Green LED on PD10

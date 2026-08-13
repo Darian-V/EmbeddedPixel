@@ -2,6 +2,7 @@
 
 #include "IEth.h"
 #include "IPhy.h"
+#include "Stm32H7Mdio.h"
 #include "stm32h7rsxx_hal.h"
 
 /**
@@ -32,7 +33,7 @@ public:
      * @param cfg    MAC-level configuration (MAC address, media interface).
      * @param phy    Reference to an IPhy implementation. Must outlive this object.
      */
-    Stm32H7Eth(const Stm32H7EthConfig& cfg, IPhy& phy);
+    Stm32H7Eth(const Stm32H7EthConfig& cfg, hal::IPhy& phy);
     ~Stm32H7Eth() override;
 
     bool Init() override;
@@ -46,6 +47,7 @@ public:
 
 private:
     Stm32H7EthConfig cfg_;
-    IPhy& phy_;
+    hal::IPhy& phy_;
     ETH_HandleTypeDef heth_;
+    stm32::h7::Stm32H7Mdio mdio_;
 };

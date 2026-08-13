@@ -8,9 +8,10 @@ target_compile_definitions(${EXECUTABLE_NAME} PRIVATE
 target_include_directories(${EXECUTABLE_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/hal_impl
-    ${CMAKE_SOURCE_DIR}/vendor/stm32cubeh7rs/Drivers/STM32H7RSxx_HAL_Driver/Inc
-    ${CMAKE_SOURCE_DIR}/vendor/stm32cubeh7rs/Drivers/CMSIS/Device/ST/STM32H7RSxx/Include
-    ${CMAKE_SOURCE_DIR}/vendor/stm32cubeh7rs/Drivers/CMSIS/Include
+    ${CMAKE_SOURCE_DIR}/vendor/stm32h7rs/Drivers/STM32H7RSxx_HAL_Driver/Inc
+    ${CMAKE_SOURCE_DIR}/vendor/stm32h7rs/Drivers/CMSIS/Device/ST/STM32H7RSxx/Include
+    ${CMAKE_SOURCE_DIR}/vendor/stm32h7rs/Drivers/CMSIS/Include
+    ${CMAKE_SOURCE_DIR}/components/drivers/lan8742
 )
 
 # MCU System and Startup Sources
@@ -24,13 +25,15 @@ target_sources(${EXECUTABLE_NAME} PRIVATE
 # HAL Abstraction Implementations
 target_sources(${EXECUTABLE_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/hal_impl/Stm32H7Gpio.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/hal_impl/Stm32H7Uart.cpp
 )
 
 if(NOT APP STREQUAL "bootloader")
     target_compile_definitions(${EXECUTABLE_NAME} PRIVATE USE_FREERTOS)
     target_sources(${EXECUTABLE_NAME} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/hal_impl/Stm32H7Eth.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/hal_impl/Lan8742Phy.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/hal_impl/Stm32H7Mdio.cpp
+        ${CMAKE_SOURCE_DIR}/components/drivers/lan8742/Lan8742Phy.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/FreeRtosThread.cpp
     )
 endif()
@@ -38,7 +41,7 @@ endif()
 
 # STM32 Vendor HAL Sources
 file(GLOB HAL_SRCS 
-    "${CMAKE_SOURCE_DIR}/vendor/stm32cubeh7rs/Drivers/STM32H7RSxx_HAL_Driver/Src/*.c"
+    "${CMAKE_SOURCE_DIR}/vendor/stm32h7rs/Drivers/STM32H7RSxx_HAL_Driver/Src/*.c"
 )
 # Exclude templates
 list(FILTER HAL_SRCS EXCLUDE REGEX ".*_template\\.c$")

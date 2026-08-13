@@ -10,7 +10,7 @@
 
 int main(void) {
     Board_Init();
-    console_init();
+    console_init(Board_GetDebugUart());
 
     printf("\r\n=== EthernetDev ===\r\n");
 

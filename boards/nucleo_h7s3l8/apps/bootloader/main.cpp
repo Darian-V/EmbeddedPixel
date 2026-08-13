@@ -50,7 +50,7 @@ int main(void)
 {
     // Initialize the HAL and System Clocks
     Board_Init();
-    console_init();
+    console_init(Board_GetDebugUart());
 
     printf("\r\n\r\n=== Bootloader Started ===\r\n");
 
