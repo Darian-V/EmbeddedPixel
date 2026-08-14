@@ -51,13 +51,17 @@ if(APP STREQUAL "bootloader")
         ${CMAKE_SOURCE_DIR}/vendor/stm32h7rs/Middlewares/ST/STM32_ExtMem_Manager/sal/stm32_sal_xspi.c
     )
 else()
-    target_include_directories(${EXECUTABLE_NAME} PRIVATE
-        ${CMAKE_SOURCE_DIR}/components/net
-    )
     target_sources(${EXECUTABLE_NAME} PRIVATE
         ${CMAKE_SOURCE_DIR}/boards/${BOARD}/apps/${APP}/main.cpp
-        ${CMAKE_SOURCE_DIR}/components/net/NetManager.cpp
     )
+    if(APP STREQUAL "ethernetdev")
+        target_include_directories(${EXECUTABLE_NAME} PRIVATE
+            ${CMAKE_SOURCE_DIR}/components/net
+        )
+        target_sources(${EXECUTABLE_NAME} PRIVATE
+            ${CMAKE_SOURCE_DIR}/components/net/NetManager.cpp
+        )
+    endif()
     if(APP STREQUAL "blinky" OR APP STREQUAL "ethernetdev")
         target_sources(${EXECUTABLE_NAME} PRIVATE
             ${CMAKE_SOURCE_DIR}/components/tasks/BlinkTask.cpp

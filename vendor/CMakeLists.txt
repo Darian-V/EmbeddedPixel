@@ -28,7 +28,7 @@ if (NOT ${TARGET} STREQUAL "mock")
 endif()
 
 # lwIP library
-if (NOT ${TARGET} STREQUAL "mock")
+if (NOT ${TARGET} STREQUAL "mock" AND EXISTS "${CMAKE_SOURCE_DIR}/targets/${TARGET}/lwip_port")
     set(LWIP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lwip)
     
     add_library(lwip STATIC
