@@ -19,7 +19,13 @@ Stm32H743Uart::Stm32H743Uart(USART_TypeDef* instance, uint32_t baud_rate) {
 }
 
 bool Stm32H743Uart::init() {
-    return HAL_UART_Init(&huart_) == HAL_OK;
+    if (HAL_UART_Init(&huart_) != HAL_OK) {
+        return false;
+    }
+    HAL_UARTEx_SetTxFifoThreshold(&huart_, UART_TXFIFO_THRESHOLD_1_8);
+    HAL_UARTEx_SetRxFifoThreshold(&huart_, UART_RXFIFO_THRESHOLD_1_8);
+    HAL_UARTEx_DisableFifoMode(&huart_);
+    return true;
 }
 
 bool Stm32H743Uart::transmit(const uint8_t* data, size_t length) {

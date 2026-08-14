@@ -81,19 +81,6 @@ static void MPU_Config(void) {
 // ── Debug UART (USART1 on PB6 TX / PB7 RX, 115200 baud) ────────────────────
 static stm32::h743::Stm32H743Uart g_debug_uart(USART1, 115200);
 
-static void DebugUart_GpioInit(void) {
-    __HAL_RCC_USART1_CLK_ENABLE();
-    __HAL_RCC_GPIOB_CLK_ENABLE();
-
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-    GPIO_InitStruct.Pin = GPIO_PIN_6 | GPIO_PIN_7;
-    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    GPIO_InitStruct.Alternate = GPIO_AF7_USART1;
-    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-}
-
 void Board_Init() {
     // 0. Configure MPU and Caches
     MPU_Config();
@@ -107,8 +94,7 @@ void Board_Init() {
     SystemClock_Config();
     SystemCoreClockUpdate();
 
-    // 3. Initialize debug UART (USART1 on PB6/PB7)
-    DebugUart_GpioInit();
+    // 3. Initialize debug UART (USART1 on PB6/PB7 via HAL_UART_MspInit)
     g_debug_uart.init();
 }
 
