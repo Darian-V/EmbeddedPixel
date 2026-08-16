@@ -37,6 +37,8 @@ enum class MessageType : uint16_t {
     CMD_GET_CONFIG_RESP     = 0x0104,
     CMD_START_STREAM        = 0x0110,
     CMD_STOP_STREAM         = 0x0111,
+    CMD_GET_STREAMS         = 0x0120,
+    CMD_GET_STREAMS_RESP    = 0x0121,
     CMD_REBOOT              = 0x01F0,
     CMD_ACK                 = 0x01FE,
     CMD_NACK                = 0x01FF,
@@ -73,6 +75,7 @@ enum class SampleType : uint16_t {
     UINT16  = 1,
     INT32   = 2,
     FLOAT32 = 3,
+    UINT32  = 4,
 };
 
 // ── Packed Structures (1-byte alignment) ───────────────────────────────────
@@ -150,16 +153,56 @@ struct PayloadAckNack {
     uint32_t reserved;
 };
 
+// ── FourCC Channel Tags ───────────────────────────────────────────────────
+constexpr uint32_t MAKE_FOURCC(char a, char b, char c, char d) {
+    return (static_cast<uint32_t>(static_cast<uint8_t>(a))) |
+           (static_cast<uint32_t>(static_cast<uint8_t>(b)) << 8) |
+           (static_cast<uint32_t>(static_cast<uint8_t>(c)) << 16) |
+           (static_cast<uint32_t>(static_cast<uint8_t>(d)) << 24);
+}
+
+constexpr uint32_t STREAM_TAG_COUNTER = MAKE_FOURCC('C', 'N', 'T', 'R'); ///< "CNTR"
+constexpr uint32_t STREAM_TAG_ADC     = MAKE_FOURCC('A', 'D', 'C', '0'); ///< "ADC0"
+constexpr uint32_t STREAM_TAG_IMU     = MAKE_FOURCC('I', 'M', 'U', '0'); ///< "IMU0"
+constexpr uint32_t STREAM_TAG_PIXELS  = MAKE_FOURCC('P', 'I', 'X', 'L'); ///< "PIXL"
+
 /**
  * @brief Header preceding raw sample array in high-speed streaming packets.
  */
 struct StreamPayloadHeader {
-    uint64_t timestamp_us;      ///< Hardware timer timestamp of first sample
+    uint64_t timestamp_us;      ///< Hardware timer timestamp of first sample (microsecond)
+    uint32_t stream_tag;        ///< 4-character FourCC identifier (e.g. 'CNTR', 'ADC0')
     uint16_t sample_rate_hz;    ///< Sampling frequency (Hz)
     uint16_t sample_count;      ///< Samples packed in this frame
     uint16_t channel_count;     ///< Number of channels per sample
     uint16_t sample_type;       ///< SampleType enum value
 };
+
+/**
+ * @brief Descriptor for a single registered channel stream.
+ */
+struct StreamDescriptor {
+    uint32_t stream_tag;        ///< 4-character FourCC identifier (e.g. 'CNTR')
+    char     name[16];          ///< Null-terminated stream name (e.g. "Counter")
+    uint16_t sample_rate_hz;    ///< Native/configured sampling rate (Hz)
+    uint16_t batch_count;       ///< Batch count
+    uint16_t channel_count;     ///< Number of channels per sample
+    uint16_t sample_type;       ///< SampleType enum value
+    uint8_t  is_enabled;        ///< 1 = active, 0 = disabled
+    uint8_t  reserved[3];       ///< Alignment padding
+};
+
+static_assert(sizeof(StreamDescriptor) == 32, "StreamDescriptor must be exactly 32 bytes");
+
+/**
+ * @brief Response payload for CMD_GET_STREAMS.
+ */
+struct PayloadGetStreamsResp {
+    uint16_t stream_count;      ///< Number of following StreamDescriptor entries
+    uint16_t reserved;
+};
+
+static_assert(sizeof(PayloadGetStreamsResp) == 4, "PayloadGetStreamsResp must be exactly 4 bytes");
 
 #pragma pack(pop)
 
