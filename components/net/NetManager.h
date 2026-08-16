@@ -66,6 +66,13 @@ public:
     struct netif& get_netif() { return netif_; }
     const IpConfig& config() const { return cfg_; }
 
+    bool is_link_up() const { return eth_.IsLinkUp(); }
+    bool is_ready() const { return lwip_ready_ && (netif_ip4_addr(&netif_)->addr != 0); }
+    uint32_t get_ip_addr() const { return netif_ip4_addr(&netif_)->addr; }
+    const ip4_addr_t* get_ip4_addr() const { return netif_ip4_addr(&netif_); }
+    const uint8_t* get_mac_addr() const { return netif_.hwaddr; }
+    IEth& get_eth_driver() { return eth_; }
+
 private:
     IEth&    eth_;
     IpConfig cfg_;
