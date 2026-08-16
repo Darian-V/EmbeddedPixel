@@ -88,7 +88,13 @@ cmake -G "MinGW Makefiles" -S . -B build -DAPP=blinky -DBOARD=nucleo_h7s3l8 -DTA
 cmake --build build
 ```
 
-#### Ethernet Dev (Network Stack on Nucleo-H7S3L8)
+#### Temp Test (On-Chip DTS Temperature Sensor on Nucleo-H7S3L8)
+```bash
+cmake -G "MinGW Makefiles" -S . -B build -DAPP=temp_test -DBOARD=nucleo_h7s3l8 -DTARGET=stm32h7
+cmake --build build
+```
+
+#### Ethernet Dev (Network Stack & Multi-Stream Telemetry on Nucleo-H7S3L8)
 ```bash
 cmake -G "MinGW Makefiles" -S . -B build -DAPP=ethernetdev -DBOARD=nucleo_h7s3l8 -DTARGET=stm32h7
 cmake --build build

@@ -68,9 +68,14 @@ else()
             ${CMAKE_SOURCE_DIR}/components/net/services/CommandService.cpp
         )
     endif()
-    if(APP STREQUAL "blinky" OR APP STREQUAL "ethernetdev")
+    if(APP STREQUAL "blinky" OR APP STREQUAL "ethernetdev" OR APP STREQUAL "temp_test")
         target_sources(${EXECUTABLE_NAME} PRIVATE
             ${CMAKE_SOURCE_DIR}/components/tasks/BlinkTask.cpp
+        )
+    endif()
+    if(APP STREQUAL "temp_test")
+        target_sources(${EXECUTABLE_NAME} PRIVATE
+            ${CMAKE_SOURCE_DIR}/components/tasks/TempTask.cpp
         )
     endif()
 endif()

@@ -3,6 +3,7 @@
 
 #include "IGpio.h"
 #include "IUart.h"
+#include "ITempSensor.h"
 
 // Interface for board initialization
 // Apps can call this without knowing which board is underneath
@@ -13,5 +14,8 @@ hal::IGpio& Board_GetLed();
 
 // Returns the board's debug UART, fully initialized.
 hal::IUart& Board_GetDebugUart();
+
+// Returns the board's on-chip temperature sensor.
+hal::ITempSensor& Board_GetTempSensor();
 
 #endif // BOARD_INIT_H

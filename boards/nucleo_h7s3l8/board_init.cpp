@@ -2,6 +2,7 @@
 #include "stm32h7rsxx_hal.h"
 #include "Stm32H7Gpio.h"
 #include "Stm32H7Uart.h"
+#include "Stm32H7Dts.h"
 
 extern "C" void Error_Handler(void);
 
@@ -187,3 +188,11 @@ hal::IGpio& Board_GetLed() {
     HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
     return g_green_led;
 }
+
+// Nucleo-H7S3L8: Internal DTS Sensor
+static stm32::h7::Stm32H7Dts g_temp_sensor;
+
+hal::ITempSensor& Board_GetTempSensor() {
+    return g_temp_sensor;
+}
+

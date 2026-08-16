@@ -49,12 +49,15 @@ int main(void) {
 
     // ── Board-Specific Telemetry Channels ──────────────────────────────────
     static net::CounterChannel counterChannel(10); // 10Hz Monotonic Counter ('CNTR')
+    static hal::ITempSensor& tempSensor = Board_GetTempSensor();
+    static net::TemperatureChannel tempChannel(tempSensor, 1); // 1Hz DTS Temperature ('TEMP')
 
     // ── Network Services ───────────────────────────────────────────────────
-    static net::services::DiscoveryService discoveryService(netMan, NODE_ID);
+    static net::services::DiscoveryService discoveryService(netMan, NODE_ID, &tempSensor);
     static stm32::FreeRtosThread discoveryThread(discoveryService, "DiscoverySvc", 1024, 2);
 
     static net::services::TelemetryService telemetryService(netMan, NODE_ID, counterChannel);
+    telemetryService.register_channel(tempChannel);
     static stm32::FreeRtosThread telemetryThread(telemetryService, "TelemetrySvc", 2048, 4);
 
     static net::services::CommandService commandService(netMan, discoveryService, telemetryService, NODE_ID);
