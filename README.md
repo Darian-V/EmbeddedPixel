@@ -51,6 +51,19 @@ The repository is structured to enforce strict dependency rules. Higher layers c
 
 Ensure `arm-none-eabi-gcc` and `mingw32-make` are on your `PATH`.
 
+### Cloning the Repository
+
+To clone the repository with shallow submodules for minimal disk usage:
+
+```bash
+git clone --recurse-submodules --shallow-submodules https://github.com/Darian-V/EmbeddedPixel.git
+```
+
+If already cloned, initialize submodules with:
+```bash
+git submodule update --init --recursive --depth 1
+```
+
 ## Building the Project
 
 This project uses a multi-target CMake build strategy. You must specify the application to build via `-DAPP=<name>`.
@@ -111,7 +124,15 @@ STM32_Programmer_CLI.exe -c port=SWD -d boards/PixelJam/apps/UARTDebug/programmi
 
 > **Artifact convention:** After each build, `.bin` and `.hex` files are automatically copied into `boards/<board>/apps/<app>/programming_files/`. These files **are tracked by git** and pushed to the remote — so the latest flashable binary for each app is always available directly from the repository without needing to rebuild. Intermediate build artifacts (`build/`, `*.elf`, `*.map`) remain gitignored.
 
-### 4. Serial Verification & Telemetry
+### 4. Cleaning Build Artifacts
+
+To purge all local build directories and object caches while preserving staged `programming_files/`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/clean.ps1
+```
+
+### 5. Serial Verification & Telemetry
 
 Open the ST-Link Virtual COM Port (`115200` baud, 8N1) using any terminal emulator (or serial MCP tools) to view live bootloader handoff and application diagnostics:
 
