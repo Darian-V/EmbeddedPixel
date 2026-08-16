@@ -172,8 +172,10 @@ enum class MessageType : uint16_t {
     CMD_SET_CONFIG          = 0x0102,   ///< Write configuration parameters
     CMD_GET_CONFIG          = 0x0103,   ///< Read configuration parameters
     CMD_GET_CONFIG_RESP     = 0x0104,
-    CMD_START_STREAM        = 0x0110,   ///< Begin streaming telemetry
-    CMD_STOP_STREAM         = 0x0111,   ///< Stop streaming telemetry
+    CMD_START_STREAM        = 0x0110,   ///< Begin streaming telemetry (supports FourCC stream_tag)
+    CMD_STOP_STREAM         = 0x0111,   ///< Stop streaming telemetry (supports FourCC stream_tag)
+    CMD_GET_STREAMS         = 0x0120,   ///< Query registered channel stream catalog
+    CMD_GET_STREAMS_RESP    = 0x0121,   ///< Node stream catalog response
     CMD_REBOOT              = 0x01F0,   ///< Software reset / DFU trigger
     CMD_ACK                 = 0x01FE,   ///< Positive response
     CMD_NACK                = 0x01FF,   ///< Negative response with error code
@@ -192,26 +194,47 @@ enum class MessageType : uint16_t {
 #pragma pack(push, 1)
 struct PayloadHeartbeat {
     uint32_t uptime_ms;         ///< Milliseconds since MCU boot
-    uint32_t fw_version;        ///< Major.Minor.Patch packed
+    uint32_t fw_version;        ///< Packed uint32 (Major.Minor.Patch.Build)
     uint8_t  node_state;        ///< 0=Init, 1=Idle, 2=Streaming, 3=Fault
-    uint8_t  active_streams;    ///< Bitmask of running data producers
-    uint16_t vdd_mv;            ///< MCU supply voltage in mV (e.g. 3300)
-    int16_t  core_temp_c_x10;   ///< Internal junction temp in 0.1 deg C
+    uint8_t  active_streams;    ///< Bitmask of active streaming channels
+    uint16_t vdd_mv;            ///< Supply voltage in mV (e.g. 3300)
+    int16_t  core_temp_c_x10;   ///< Junction temperature in 0.1 deg C
     uint16_t reserved;
 };
 #pragma pack(pop)
 ```
 
-#### 2. Batched Sensor Streaming Payload (`STREAM_SENSOR_BATCH` / `0x0200`)
+#### 2. Stream Catalog Inquiry (`CMD_GET_STREAMS_RESP` / `0x0121`)
+```cpp
+#pragma pack(push, 1)
+struct StreamDescriptor {
+    uint32_t stream_tag;        ///< 4-character FourCC tag (e.g. 'CNTR')
+    char     name[16];          ///< Null-terminated stream name
+    uint16_t sample_rate_hz;    ///< Sampling frequency (Hz)
+    uint16_t batch_count;       ///< Batch count per packet
+    uint16_t channel_count;     ///< Number of channels per sample
+    uint16_t sample_type;       ///< SampleType enum (0=INT16, 1=UINT16, 2=INT32, 3=FLOAT32, 4=UINT32)
+    uint8_t  is_enabled;        ///< 1 = active, 0 = disabled
+    uint8_t  reserved[3];       ///< 32-byte alignment padding
+};
+
+struct PayloadGetStreamsResp {
+    uint16_t stream_count;      ///< Number of following StreamDescriptor entries
+    uint16_t reserved;
+};
+#pragma pack(pop)
+```
+
+#### 3. High-Speed Stream Metadata Header (`StreamPayloadHeader` — 20 Bytes)
 ```cpp
 #pragma pack(push, 1)
 struct StreamPayloadHeader {
-    uint64_t timestamp_us;      ///< 64-bit hardware timer timestamp of first sample
-    uint16_t sample_rate_hz;    ///< Nominal sample frequency (e.g. 10000)
-    uint16_t sample_count;      ///< Number of samples in this payload
-    uint16_t channel_count;     ///< Number of channels per sample (e.g. 8)
-    uint16_t sample_type;       ///< 0=int16, 1=uint16, 2=int32, 3=float32
-    // Followed immediately by: raw byte array [sample_count * channel_count * sizeof(type)]
+    uint64_t timestamp_us;      ///< Hardware timer microsecond timestamp of first sample
+    uint32_t stream_tag;        ///< 4-character FourCC identifier ('CNTR', 'ADC0', 'IMU0')
+    uint16_t sample_rate_hz;    ///< Configured sampling frequency (Hz)
+    uint16_t sample_count;      ///< Samples packed in this frame
+    uint16_t channel_count;     ///< Number of channels per sample
+    uint16_t sample_type;       ///< SampleType enum value
 };
 #pragma pack(pop)
 ```
