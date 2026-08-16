@@ -1,9 +1,16 @@
 [submodule "vendor/lwip"]
 	path = vendor/lwip
 	url = https://git.savannah.nongnu.org/git/lwip.git
+	shallow = true
 [submodule "vendor/FreeRTOS-Kernel"]
 	path = vendor/FreeRTOS-Kernel
 	url = https://github.com/FreeRTOS/FreeRTOS-Kernel.git
+	shallow = true
 [submodule "vendor/stm32h7"]
 	path = vendor/stm32h7
 	url = https://github.com/STMicroelectronics/STM32CubeH7.git
+	shallow = true
+[submodule "vendor/stm32h7rs"]
+	path = vendor/stm32h7rs
+	url = https://github.com/STMicroelectronics/stm32cubeh7rs.git
+	shallow = true

@@ -1,16 +1,22 @@
-# Build directories
-build*/
+# Build directories and caches
+build/
+build_*/
 bin/
-
 obj/
 *.elf
 *.map
 *.exe
+*.o
+*.obj
+*.d
+*.su
 
 # IDE and Environment
 .vscode/
 .idea/
 .agents/
+*.swp
+*~
 
 # OS generated files
 .DS_Store

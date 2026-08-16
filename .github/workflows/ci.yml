@@ -1,0 +1,55 @@
+name: CI & Build Verification
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build Multi-Target Firmware
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository with shallow submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Check File Size Guardrail (< 1MB per file)
+        run: |
+          echo "Checking for files larger than 1MB..."
+          LARGE_FILES=$(find . -not -path '*/.*' -type f -size +1024k)
+          if [ -n "$LARGE_FILES" ]; then
+            echo "ERROR: The following files exceed 1MB limit:"
+            echo "$LARGE_FILES"
+            exit 1
+          fi
+          echo "File size check passed!"
+
+      - name: Install ARM GNU Toolchain and Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi ninja-build cmake
+
+      - name: Build Nucleo-H7S3L8 Bootloader
+        run: |
+          cmake -G "Ninja" -S . -B build/bootloader -DAPP=bootloader -DBOARD=nucleo_h7s3l8 -DTARGET=stm32h7
+          cmake --build build/bootloader
+
+      - name: Build Nucleo-H7S3L8 Blinky
+        run: |
+          cmake -G "Ninja" -S . -B build/blinky -DAPP=blinky -DBOARD=nucleo_h7s3l8 -DTARGET=stm32h7
+          cmake --build build/blinky
+
+      - name: Build Nucleo-H7S3L8 EthernetDev
+        run: |
+          cmake -G "Ninja" -S . -B build/ethernetdev -DAPP=ethernetdev -DBOARD=nucleo_h7s3l8 -DTARGET=stm32h7
+          cmake --build build/ethernetdev
+
+      - name: Build PixelJam UARTDebug
+        run: |
+          cmake -G "Ninja" -S . -B build/uartdebug -DAPP=UARTDebug -DBOARD=PixelJam -DTARGET=stm32h743
+          cmake --build build/uartdebug
