@@ -154,7 +154,7 @@ Build-time network defaults can also be passed via CMake:
 
 | CMake Variable | Default | Description |
 |---|---|---|
-| `NET_LOG_LEVEL` | `3` | Net log verbosity: `0`=off, `1`=err, `2`=info, `3`=debug |
+| `NET_LOG_LEVEL` | `2` | Net log verbosity: `0`=off, `1`=err, `2`=info, `3`=debug |
 | `NET_USE_DHCP` | `OFF` | Enable DHCP default |
 | `NET_STATIC_IP_ADDR` | `192, 168, 1, 100` | Static/fallback IP (byte-comma format) |
 | `NET_STATIC_NETMASK` | `255, 255, 255, 0` | Subnet mask |
@@ -211,9 +211,3 @@ hal::IGpio& Board_GetLed();
 
 4. **`main.cpp` — unchanged ✅**
 
-## C++ & FreeRTOS "Gotchas"
-- **ARM Cortex-M7 Memory Alignment (`MEM_ALIGNMENT 4`):** In lwIP on ARM Cortex-M7 processors, `#define MEM_ALIGNMENT 4` MUST be set in `lwipopts.h`. Without 4-byte memory alignment, lwIP heap allocations return 2-byte aligned addresses, which trigger an immediate Cortex-M7 Unaligned Access HardFault (`SCB->CFSR = 0x01000000`) when executing 64-bit `STRD`/`LDRD` instructions.
-- **MSP Reset Bug:** On Cortex-M processors, FreeRTOS resets the Main Stack Pointer (MSP) when the scheduler starts. **NEVER** allocate hardware drivers or RTOS Tasks on the local `main()` stack. Always mark them as `static` or allocate them globally so they are placed in `.bss` and survive the scheduler boot sequence.
-- **Linker Specs:** Always build with `--specs=nano.specs --specs=nosys.specs` to avoid linker errors for missing standard library syscalls (`_close`, `_read`). The resulting `_close is not implemented` linker warnings are expected and benign.
-- **Binary Bloat:** Always compile with `-fno-exceptions -fno-rtti` in a bare-metal environment to prevent massive standard library bloat that can easily overflow internal FLASH.
-- **lwIP + FreeRTOS only in applications:** `Stm32H7Eth.cpp`, `NetManager.cpp`, and `FreeRtosThread.cpp` are excluded from the bootloader build. The bootloader runs bare-metal with no RTOS or network stack.

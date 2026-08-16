@@ -81,8 +81,8 @@ if(NOT APP STREQUAL "bootloader")
     add_subdirectory(vendor)
     
     # Network Configuration
-    set(NET_LOG_LEVEL "3" CACHE STRING "Net log verbosity: 0=off 1=err 2=info 3=debug" FORCE)
-    target_compile_definitions(${EXECUTABLE_NAME} PRIVATE NET_LOG_LEVEL=3)
+    set(NET_LOG_LEVEL "2" CACHE STRING "Net log verbosity: 0=off 1=err 2=info 3=debug" FORCE)
+    target_compile_definitions(${EXECUTABLE_NAME} PRIVATE NET_LOG_LEVEL=2)
 
 
     configure_file(
