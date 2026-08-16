@@ -6,6 +6,7 @@ static hal::IUart* g_console_uart = nullptr;
 void console_init(hal::IUart& uart)
 {
     g_console_uart = &uart;
+    setvbuf(stdout, nullptr, _IONBF, 0);
 }
 
 extern "C" {

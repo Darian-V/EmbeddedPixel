@@ -58,8 +58,8 @@ target_compile_options(${EXECUTABLE_NAME} PRIVATE
     -Wextra
     -O0
     -g3
-    -fno-exceptions
-    -fno-rtti
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
 )
 
 # Target-specific link flags

@@ -70,11 +70,11 @@ void NetManager::run() {
     LOG_INFO("NetManager: PHY ID = 0x%08lX\r\n", eth_.GetPhyId());
 
     // 2. Wait for physical link
-    LOG_INFO("NetManager: waiting for link");
+    LOG_INFO("NetManager: waiting for physical link...\r\n");
     while (!eth_.WaitForLink(1000)) {
-        LOG_INFO(".");
+        LOG_INFO("NetManager: waiting for link...\r\n");
     }
-    LOG_INFO("\r\nNetManager: link UP\r\n");
+    LOG_INFO("NetManager: link UP\r\n");
 
     // 3. Initialise lwIP + add netif (runs on_tcpip_init_done inside tcpip_thread)
     LOG_DBG("NetManager: calling tcpip_init...\r\n");

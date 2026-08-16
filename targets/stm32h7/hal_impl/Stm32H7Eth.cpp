@@ -230,8 +230,6 @@ bool Stm32H7Eth::Transmit(const uint8_t* buffer, uint16_t length) {
 
     SCB_CleanDCache_by_Addr((uint32_t*)DMATxDscrTab, sizeof(DMATxDscrTab));
 
-    LOG_DBG("ETH Tx %d bytes\r\n", length);
-
     if (HAL_ETH_Transmit(&heth_, &txCfg, 100) != HAL_OK) {
         LOG_ERR("ETH Tx failed Err=0x%lX DMAErr=0x%lX State=0x%lX\r\n",
                 heth_.ErrorCode, heth_.DMAErrorCode, heth_.gState);
@@ -248,7 +246,6 @@ void Stm32H7Eth::ProcessRx() {
 
     while (HAL_ETH_ReadData(&heth_, (void**)&p) == HAL_OK) {
         if (p != nullptr) {
-            LOG_DBG("ETH Rx %d bytes\r\n", p->tot_len);
             if (rx_cb_) {
                 rx_cb_(rx_user_data_, p);
             } else {
