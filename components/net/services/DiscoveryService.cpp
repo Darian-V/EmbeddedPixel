@@ -21,7 +21,7 @@ DiscoveryService::DiscoveryService(NetManager& netManager, uint16_t nodeId)
     : net_(netManager),
       node_id_(nodeId),
       seq_num_(0),
-      state_(proto::NodeState::IDLE) {}
+      state_(proto::NodeState::STREAMING) {}
 
 void DiscoveryService::run() {
     LOG_INFO("DiscoveryService: waiting for network ready...\r\n");
@@ -114,6 +114,8 @@ void DiscoveryService::sendHeartbeat(struct netconn* conn) {
 
     netconn_sendto(conn, buf, &broadcast_addr, proto::PORT_DISCOVERY);
     netbuf_delete(buf);
+
+    LOG_DBG("DiscoveryService: Tx Heartbeat seq=%lu state=%u\r\n", seq_num_, static_cast<uint8_t>(state_));
 }
 
 void DiscoveryService::handleIncomingPacket(struct netconn* conn, struct netbuf* rxBuf) {
