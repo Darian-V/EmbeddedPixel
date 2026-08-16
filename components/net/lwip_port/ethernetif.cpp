@@ -15,16 +15,36 @@ struct EthernetIfState {
     const char* hostname;
 };
 
-// ── Global netif pointer (read by Stm32H7Eth::ProcessRx) ──────────────────
-struct netif* g_netif_ptr = nullptr;
-
 // ── Low-level output (lwIP → MAC) ─────────────────────────────────────────
 static err_t low_level_output(struct netif* netif, struct pbuf* p) {
     auto* state = static_cast<EthernetIfState*>(netif->state);
-    if (state && state->driver) {
-        return state->driver->Transmit(p) ? ERR_OK : ERR_IF;
+    if (!state || !state->driver) {
+        return ERR_IF;
     }
-    return ERR_IF;
+
+    if (p->next == nullptr) {
+        // Single contiguous pbuf
+        return state->driver->Transmit(static_cast<const uint8_t*>(p->payload), p->len) ? ERR_OK : ERR_IF;
+    } else {
+        // Chained pbuf
+        uint8_t buffer[1536];
+        if (p->tot_len > sizeof(buffer)) {
+            return ERR_MEM;
+        }
+        pbuf_copy_partial(p, buffer, p->tot_len, 0);
+        return state->driver->Transmit(buffer, p->tot_len) ? ERR_OK : ERR_IF;
+    }
+}
+
+// ── Packet reception callback from IEth driver ────────────────────────────
+static void rx_packet_handler(void* user_data, void* packet) {
+    auto* netif = static_cast<struct netif*>(user_data);
+    auto* p = static_cast<struct pbuf*>(packet);
+    if (netif && p) {
+        if (netif->input(p, netif) != ERR_OK) {
+            pbuf_free(p);
+        }
+    }
 }
 
 // ── netif init callback ────────────────────────────────────────────────────
@@ -51,8 +71,8 @@ extern "C" err_t ethernetif_init(struct netif* netif) {
     netif->mtu   = 1500;
     netif->flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_LINK_UP;
 
-    // Expose this netif globally so ProcessRx can deliver packets
-    g_netif_ptr = netif;
+    // Register this netif as the packet receiver on the driver instance
+    state->driver->SetRxCallback(rx_packet_handler, netif);
 
     return ERR_OK;
 }

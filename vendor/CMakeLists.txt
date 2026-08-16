@@ -28,8 +28,9 @@ if (NOT ${TARGET} STREQUAL "mock")
 endif()
 
 # lwIP library
-if (NOT ${TARGET} STREQUAL "mock" AND EXISTS "${CMAKE_SOURCE_DIR}/targets/${TARGET}/lwip_port")
+if (NOT ${TARGET} STREQUAL "mock")
     set(LWIP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lwip)
+    set(LWIP_PORT_DIR ${CMAKE_SOURCE_DIR}/components/net/lwip_port)
     
     add_library(lwip STATIC
         ${LWIP_DIR}/src/core/init.c
@@ -58,13 +59,13 @@ if (NOT ${TARGET} STREQUAL "mock" AND EXISTS "${CMAKE_SOURCE_DIR}/targets/${TARG
         ${LWIP_DIR}/src/api/tcpip.c
         ${LWIP_DIR}/src/api/err.c
         ${LWIP_DIR}/src/api/sockets.c
-        ${CMAKE_SOURCE_DIR}/targets/${TARGET}/lwip_port/sys_arch.cpp
-        ${CMAKE_SOURCE_DIR}/targets/${TARGET}/lwip_port/ethernetif.cpp
+        ${LWIP_PORT_DIR}/sys_arch.cpp
+        ${LWIP_PORT_DIR}/ethernetif.cpp
     )
 
     target_include_directories(lwip PUBLIC
         ${LWIP_DIR}/src/include
-        ${CMAKE_SOURCE_DIR}/targets/${TARGET}/lwip_port
+        ${LWIP_PORT_DIR}
         ${CMAKE_SOURCE_DIR}/targets/${TARGET}
         ${CMAKE_SOURCE_DIR}/core/hal
         ${FREERTOS_DIR}/include

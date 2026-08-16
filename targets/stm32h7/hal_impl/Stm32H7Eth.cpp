@@ -196,36 +196,41 @@ uint32_t Stm32H7Eth::GetPhyId() {
     return phy_.getId();
 }
 
+void Stm32H7Eth::SetRxCallback(RxCallback cb, void* user_data) {
+    rx_cb_ = cb;
+    rx_user_data_ = user_data;
+}
+
 // ── Transmit ─────────────────────────────────────────────────────────────────
 static uint32_t tx_idx = 0;
 
-bool Stm32H7Eth::Transmit(struct pbuf* p) {
-    if (p->tot_len > ETH_MAX_PAYLOAD) return false;
+bool Stm32H7Eth::Transmit(const uint8_t* buffer, uint16_t length) {
+    if (length > ETH_MAX_PAYLOAD || buffer == nullptr) return false;
 
     uint8_t* buf = Tx_Buff[tx_idx];
     tx_idx = (tx_idx + 1) % ETH_TX_DESC_CNT;
 
-    pbuf_copy_partial(p, buf, p->tot_len, 0);
+    memcpy(buf, buffer, length);
 
     uint32_t alignedAddr = (uint32_t)buf & ~0x1FUL;
-    uint32_t alignedSize = (((uint32_t)buf - alignedAddr) + p->tot_len + 0x1FUL) & ~0x1FUL;
+    uint32_t alignedSize = (((uint32_t)buf - alignedAddr) + length + 0x1FUL) & ~0x1FUL;
     SCB_CleanDCache_by_Addr((uint32_t*)alignedAddr, alignedSize);
 
     ETH_BufferTypeDef txBuf;
     txBuf.buffer = buf;
-    txBuf.len    = p->tot_len;
+    txBuf.len    = length;
     txBuf.next   = nullptr;
 
     ETH_TxPacketConfig txCfg;
     memset(&txCfg, 0, sizeof(txCfg));
     txCfg.Attributes  = ETH_TX_PACKETS_FEATURES_CRCPAD;
     txCfg.CRCPadCtrl  = ETH_CRC_PAD_INSERT;
-    txCfg.Length      = p->tot_len;
+    txCfg.Length      = length;
     txCfg.TxBuffer    = &txBuf;
 
     SCB_CleanDCache_by_Addr((uint32_t*)DMATxDscrTab, sizeof(DMATxDscrTab));
 
-    LOG_DBG("ETH Tx %d bytes\r\n", p->tot_len);
+    LOG_DBG("ETH Tx %d bytes\r\n", length);
 
     if (HAL_ETH_Transmit(&heth_, &txCfg, 100) != HAL_OK) {
         LOG_ERR("ETH Tx failed Err=0x%lX DMAErr=0x%lX State=0x%lX\r\n",
@@ -236,8 +241,6 @@ bool Stm32H7Eth::Transmit(struct pbuf* p) {
 }
 
 // ── ProcessRx ────────────────────────────────────────────────────────────────
-extern struct netif* g_netif_ptr; // defined in ethernetif.cpp
-
 void Stm32H7Eth::ProcessRx() {
     struct pbuf* p = nullptr;
 
@@ -246,7 +249,9 @@ void Stm32H7Eth::ProcessRx() {
     while (HAL_ETH_ReadData(&heth_, (void**)&p) == HAL_OK) {
         if (p != nullptr) {
             LOG_DBG("ETH Rx %d bytes\r\n", p->tot_len);
-            if (g_netif_ptr && g_netif_ptr->input(p, g_netif_ptr) != ERR_OK) {
+            if (rx_cb_) {
+                rx_cb_(rx_user_data_, p);
+            } else {
                 pbuf_free(p);
             }
         }

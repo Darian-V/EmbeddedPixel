@@ -9,16 +9,9 @@ extern "C" {
 #endif
 
 /**
- * @brief Pointer to the active lwIP netif.
- * Set by ethernetif_init(); read by Stm32H7Eth::ProcessRx().
- * Must be treated as read-only outside of ethernetif.cpp.
- */
-extern struct netif* g_netif_ptr;
-
-/**
  * @brief lwIP netif init callback.
  *
- * netif->state must point to a valid EthernetIfState (internal type).
+ * netif->state must point to a valid EthernetIfState.
  */
 err_t ethernetif_init(struct netif* netif);
 
