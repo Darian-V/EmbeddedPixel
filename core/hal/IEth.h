@@ -11,6 +11,8 @@
  */
 class IEth {
 public:
+    using RxCallback = void (*)(void* user_data, void* packet);
+
     virtual ~IEth() = default;
 
     /**
@@ -39,18 +41,25 @@ public:
     virtual bool IsLinkUp() = 0;
 
     /**
-     * @brief Process received packets and forward them to lwIP.
-     * Called from the NetManager polling loop. Internally calls
-     * HAL_ETH_ReadData() and delivers each pbuf to netif->input().
+     * @brief Register a callback to handle received packets.
+     * @param cb Callback function.
+     * @param user_data User pointer passed to the callback.
+     */
+    virtual void SetRxCallback(RxCallback cb, void* user_data) = 0;
+
+    /**
+     * @brief Process received packets from DMA descriptors and forward to registered callback.
+     * Called from the NetManager polling loop.
      */
     virtual void ProcessRx() = 0;
 
     /**
-     * @brief Transmit a single lwIP pbuf chain.
-     * @param p Pointer to the pbuf to transmit.
+     * @brief Transmit a raw Ethernet frame.
+     * @param buffer Pointer to contiguous frame data.
+     * @param length Length of the frame in bytes.
      * @return true if the packet was handed to DMA successfully.
      */
-    virtual bool Transmit(struct pbuf* p) = 0;
+    virtual bool Transmit(const uint8_t* buffer, uint16_t length) = 0;
 
     /**
      * @brief Copy the 6-byte MAC address into the provided buffer.

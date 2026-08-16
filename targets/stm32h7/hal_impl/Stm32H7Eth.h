@@ -39,8 +39,9 @@ public:
     bool Init() override;
     bool WaitForLink(uint32_t timeout_ms) override;
     bool IsLinkUp() override;
+    void SetRxCallback(RxCallback cb, void* user_data) override;
     void ProcessRx() override;
-    bool Transmit(struct pbuf* p) override;
+    bool Transmit(const uint8_t* buffer, uint16_t length) override;
     void GetMacAddress(uint8_t* mac_addr) override;
     uint32_t GetPhyId() override;
     void PrintMmcCounters() override;
@@ -50,4 +51,6 @@ private:
     hal::IPhy& phy_;
     ETH_HandleTypeDef heth_;
     stm32::h7::Stm32H7Mdio mdio_;
+    RxCallback rx_cb_{nullptr};
+    void* rx_user_data_{nullptr};
 };
