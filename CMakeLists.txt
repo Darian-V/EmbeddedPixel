@@ -57,10 +57,15 @@ else()
     if(APP STREQUAL "ethernetdev")
         target_include_directories(${EXECUTABLE_NAME} PRIVATE
             ${CMAKE_SOURCE_DIR}/components/net
+            ${CMAKE_SOURCE_DIR}/components/net/proto
+            ${CMAKE_SOURCE_DIR}/components/net/services
             ${CMAKE_SOURCE_DIR}/components/net/lwip_port
         )
         target_sources(${EXECUTABLE_NAME} PRIVATE
             ${CMAKE_SOURCE_DIR}/components/net/NetManager.cpp
+            ${CMAKE_SOURCE_DIR}/components/net/services/DiscoveryService.cpp
+            ${CMAKE_SOURCE_DIR}/components/net/services/TelemetryService.cpp
+            ${CMAKE_SOURCE_DIR}/components/net/services/CommandService.cpp
         )
     endif()
     if(APP STREQUAL "blinky" OR APP STREQUAL "ethernetdev")

@@ -5,9 +5,15 @@
 #define MEM_ALIGNMENT           4       // 4-byte memory alignment for ARM Cortex-M7
 #define LWIP_NETCONN            1       // Enable Netconn API
 #define LWIP_SOCKET             0       // Disable BSD sockets (save RAM)
-#define MEM_SIZE                (16 * 1024)  // 16 KB lwIP heap
-#define MEMP_NUM_PBUF           16
-#define PBUF_POOL_SIZE          16
+#define MEM_SIZE                (32 * 1024)  // 32 KB lwIP heap
+#define MEMP_NUM_PBUF           32
+#define MEMP_NUM_NETCONN        16
+#define MEMP_NUM_NETBUF         16
+#define MEMP_NUM_UDPPCB         8
+#define MEMP_NUM_TCP_PCB        8
+#define MEMP_NUM_TCP_PCB_LISTEN 4
+#define MEMP_NUM_SYS_TIMEOUT    16
+#define PBUF_POOL_SIZE          24
 #define PBUF_POOL_BUFSIZE       1536
 #define TCP_MSS                 1460
 #define TCP_SND_BUF             (4 * TCP_MSS)
@@ -22,6 +28,10 @@
 #define DEFAULT_UDP_RECVMBOX_SIZE 16
 #define DEFAULT_TCP_RECVMBOX_SIZE 16
 #define DEFAULT_ACCEPTMBOX_SIZE 16
+
+#define LWIP_SO_RCVTIMEO        1
+#define LWIP_SO_SNDTIMEO        1
+#define LWIP_SO_RCVBUF          1
 
 // Feature flags
 #define LWIP_IPV4               1
