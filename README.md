@@ -9,9 +9,9 @@ The architecture strictly decouples application logic from hardware specifics by
 *   **Build System:** CMake (Multi-target architecture, MinGW Makefiles generator)
 *   **Execution Model:** FreeRTOS (Abstracted via OSAL)
 *   **Networking:** lwIP (Abstracted via `NetManager` / `IEth` / `IPhy`)
-*   **Supported MCUs:** STM32H7 (Specifically STM32H7RS)
-*   **Supported Boards:** Nucleo-H7S3L8, Custom PCBAs
-*   **Memory Execution:** Internal Flash (Bootloader) + Octal-SPI External Flash (Application XIP)
+*   **Supported MCUs:** STM32H7RS, STM32H743
+*   **Supported Boards:** Nucleo-H7S3L8, PixelJam, Custom PCBAs
+*   **Memory Execution:** Internal Flash (Bootloader / MCU Apps) + Octal-SPI External Flash (Application XIP)
 
 ## Two-Stage XIP Bootloader Architecture
 
@@ -65,31 +65,71 @@ cmake -G "MinGW Makefiles" -S . -B build -DAPP=bootloader
 cmake --build build
 ```
 
-Output: `apps/bootloader/programming_files/bootloader_nucleo_h7s3l8.bin`
-
-*Flash to `0x08000000` via STM32CubeProgrammer.*
+Output: `boards/nucleo_h7s3l8/apps/bootloader/programming_files/bootloader_nucleo_h7s3l8.bin`
 
 ### 2. Build an Application
 
-#### Blinky (LED smoke test)
+#### Blinky (LED smoke test on Nucleo-H7S3L8)
 ```bash
-cmake -G "MinGW Makefiles" -S . -B build -DAPP=blinky
+cmake -G "MinGW Makefiles" -S . -B build -DAPP=blinky -DBOARD=nucleo_h7s3l8 -DTARGET=stm32h7
 cmake --build build
 ```
 
-Output: `apps/blinky/programming_files/blinky_nucleo_h7s3l8.bin`
-
-#### Ethernet Dev
+#### Ethernet Dev (Network Stack on Nucleo-H7S3L8)
 ```bash
-cmake -G "MinGW Makefiles" -S . -B build -DAPP=ethernetdev
+cmake -G "MinGW Makefiles" -S . -B build -DAPP=ethernetdev -DBOARD=nucleo_h7s3l8 -DTARGET=stm32h7
 cmake --build build
 ```
 
-Output: `apps/ethernetdev/programming_files/ethernetdev_nucleo_h7s3l8.bin`
+#### UART Debug (PixelJam STM32H743)
+```bash
+cmake -G "MinGW Makefiles" -S . -B build_pj -DAPP=UARTDebug -DBOARD=PixelJam -DTARGET=stm32h743
+cmake --build build_pj
+```
 
-*Flash application binaries to `0x70000000` using the `MX25UW25645G_NUCLEO-H7S3L8` external loader in STM32CubeProgrammer.*
+### 3. Flashing via CLI (STM32CubeProgrammer)
 
-> **Artifact convention:** After each build, `.bin` and `.hex` files are automatically copied into `apps/<app>/programming_files/`. These files **are tracked by git** and pushed to the remote — so the latest flashable binary for each app is always available directly from the repository without needing to rebuild. Intermediate build artifacts (`build/`, `*.elf`, `*.map`) remain gitignored.
+Flash firmware binaries using the `STM32_Programmer_CLI.exe` tool over SWD:
+
+#### A. Nucleo-H7S3L8 (Two-Stage Bootloader + External Flash XIP)
+
+1. **Flash Bootloader** (Internal Flash at `0x08000000`):
+   ```bash
+   STM32_Programmer_CLI.exe -c port=SWD -d boards/nucleo_h7s3l8/apps/bootloader/programming_files/bootloader_nucleo_h7s3l8.bin 0x08000000 -v -rst
+   ```
+
+2. **Flash Application** (External Octal-SPI Flash at `0x70000000`):
+   ```bash
+   STM32_Programmer_CLI.exe -c port=SWD -el bin/ExternalLoader/MX25UW25645G_NUCLEO-H7S3L8.stldr -d boards/nucleo_h7s3l8/apps/ethernetdev/programming_files/ethernetdev_nucleo_h7s3l8.bin 0x70000000 -v -rst
+   ```
+
+#### B. Internal Flash Boards (e.g. PixelJam / STM32H743)
+
+```bash
+STM32_Programmer_CLI.exe -c port=SWD -d boards/PixelJam/apps/UARTDebug/programming_files/UARTDebug_PixelJam.bin 0x08000000 -v -rst
+```
+
+> **Artifact convention:** After each build, `.bin` and `.hex` files are automatically copied into `boards/<board>/apps/<app>/programming_files/`. These files **are tracked by git** and pushed to the remote — so the latest flashable binary for each app is always available directly from the repository without needing to rebuild. Intermediate build artifacts (`build/`, `*.elf`, `*.map`) remain gitignored.
+
+### 4. Serial Verification & Telemetry
+
+Open the ST-Link Virtual COM Port (`115200` baud, 8N1) using any terminal emulator (or serial MCP tools) to view live bootloader handoff and application diagnostics:
+
+```text
+=== Bootloader Started ===
+XSPI2 Initialized.
+EXTMEM_Init status: 0
+External Flash mapped to 0x70000000.
+Jumping to Application...
+
+=== EthernetDev ===
+[NET] NetManager: starting
+[NET] LAN8742: Init OK (PHY addr 0)
+[NET] NetManager: PHY ID = 0x0007C131
+[NET] NetManager: link UP
+[NET] NetManager: DHCP IP = 192.168.1.111
+[NET DBG] ETH Rx 566 bytes
+```
 
 ### Network Architecture & Configuration
 
@@ -114,7 +154,7 @@ Build-time network defaults can also be passed via CMake:
 
 | CMake Variable | Default | Description |
 |---|---|---|
-| `NET_LOG_LEVEL` | `2` | Net log verbosity: `0`=off, `1`=err, `2`=info, `3`=debug |
+| `NET_LOG_LEVEL` | `3` | Net log verbosity: `0`=off, `1`=err, `2`=info, `3`=debug |
 | `NET_USE_DHCP` | `OFF` | Enable DHCP default |
 | `NET_STATIC_IP_ADDR` | `192, 168, 1, 100` | Static/fallback IP (byte-comma format) |
 | `NET_STATIC_NETMASK` | `255, 255, 255, 0` | Subnet mask |
