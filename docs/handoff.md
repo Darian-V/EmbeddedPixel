@@ -17,3 +17,4 @@ In the latest commit, we resolved the final missing piece of the Ethernet Rx pat
 ## Next Steps
 - Implement higher-level networking protocols (e.g. DHCP, TCP/UDP sockets) using the fully functional LwIP stack.
 - Review LwIP configuration (`lwipopts.h`) to optimize memory and performance.
+- Follow the node-to-host protocol and streaming architecture defined in [ethernet_communication_architecture.md](file:///d:/repos/EmbeddedPixel/docs/ethernet_communication_architecture.md).
