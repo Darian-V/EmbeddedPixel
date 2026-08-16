@@ -17,11 +17,16 @@
 
 namespace net::services {
 
-DiscoveryService::DiscoveryService(NetManager& netManager, uint16_t nodeId)
+DiscoveryService::DiscoveryService(NetManager& netManager, uint16_t nodeId, hal::ITempSensor* tempSensor)
     : net_(netManager),
       node_id_(nodeId),
+      temp_sensor_(tempSensor),
       seq_num_(0),
-      state_(proto::NodeState::STREAMING) {}
+      state_(proto::NodeState::STREAMING) {
+    if (temp_sensor_ != nullptr) {
+        temp_sensor_->init();
+    }
+}
 
 void DiscoveryService::run() {
     LOG_INFO("DiscoveryService: waiting for network ready...\r\n");
@@ -89,7 +94,15 @@ void DiscoveryService::sendHeartbeat(struct netconn* conn) {
     payload->node_state      = static_cast<uint8_t>(state_);
     payload->active_streams  = (state_ == proto::NodeState::STREAMING) ? 0x01 : 0x00;
     payload->vdd_mv          = 3300;
-    payload->core_temp_c_x10 = 250; // 25.0 C nominal
+
+    int16_t temp_c_x10 = 250;
+    if (temp_sensor_ != nullptr) {
+        int32_t current_temp = 0;
+        if (temp_sensor_->get_temperature(current_temp)) {
+            temp_c_x10 = static_cast<int16_t>(current_temp * 10);
+        }
+    }
+    payload->core_temp_c_x10 = temp_c_x10;
     payload->reserved        = 0;
 
     proto::PacketHelper::PopulateHeader(

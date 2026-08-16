@@ -7,6 +7,8 @@
 #include "lwip/api.h"
 #include "lwip/netbuf.h"
 
+#include "ITempSensor.h"
+
 namespace net::services {
 
 /**
@@ -15,7 +17,7 @@ namespace net::services {
  */
 class DiscoveryService : public osal::Runnable {
 public:
-    DiscoveryService(NetManager& netManager, uint16_t nodeId);
+    DiscoveryService(NetManager& netManager, uint16_t nodeId, hal::ITempSensor* tempSensor = nullptr);
     ~DiscoveryService() = default;
 
     void run() override;
@@ -27,10 +29,11 @@ public:
     void set_node_id(uint16_t id) { node_id_ = id; }
 
 private:
-    NetManager&       net_;
-    uint16_t          node_id_;
-    uint32_t          seq_num_;
-    proto::NodeState  state_;
+    NetManager&        net_;
+    uint16_t           node_id_;
+    hal::ITempSensor*  temp_sensor_;
+    uint32_t           seq_num_;
+    proto::NodeState   state_;
 
     void sendHeartbeat(struct netconn* conn);
     void handleIncomingPacket(struct netconn* conn, struct netbuf* rxBuf);

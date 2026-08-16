@@ -162,6 +162,7 @@ constexpr uint32_t MAKE_FOURCC(char a, char b, char c, char d) {
 }
 
 constexpr uint32_t STREAM_TAG_COUNTER = MAKE_FOURCC('C', 'N', 'T', 'R'); ///< "CNTR"
+constexpr uint32_t STREAM_TAG_TEMP    = MAKE_FOURCC('T', 'E', 'M', 'P'); ///< "TEMP"
 constexpr uint32_t STREAM_TAG_ADC     = MAKE_FOURCC('A', 'D', 'C', '0'); ///< "ADC0"
 constexpr uint32_t STREAM_TAG_IMU     = MAKE_FOURCC('I', 'M', 'U', '0'); ///< "IMU0"
 constexpr uint32_t STREAM_TAG_PIXELS  = MAKE_FOURCC('P', 'I', 'X', 'L'); ///< "PIXL"

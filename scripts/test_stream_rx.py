@@ -26,10 +26,17 @@ def main():
             ts_us, stream_tag_raw, rate_hz, sample_count, ch_count, sample_type = struct.unpack_from('<Q4sHHHH', data, 16)
             stream_tag = stream_tag_raw.decode('ascii', errors='replace')
 
-            # 3. Parse Counter payload (at offset 36)
-            counter_val = struct.unpack_from('<I', data, 36)[0]
+            # 3. Parse sample payload (at offset 36)
+            if stream_tag == 'TEMP':
+                temp_val = struct.unpack_from('<i', data, 36)[0]
+                val_str = f"Temperature={temp_val} C"
+            elif stream_tag == 'CNTR':
+                counter_val = struct.unpack_from('<I', data, 36)[0]
+                val_str = f"Counter={counter_val:6d}"
+            else:
+                val_str = f"Raw={data[36:36+sample_count*4].hex()}"
 
-            print(f"From {addr}: Seq={seq_num:4d} | Tag='{stream_tag}' | Counter={counter_val:6d} | Rate={rate_hz}Hz | Samples={sample_count} | dt={dt:.1f}ms")
+            print(f"From {addr}: Seq={seq_num:4d} | Tag='{stream_tag}' | {val_str} | Rate={rate_hz}Hz | Samples={sample_count} | dt={dt:.1f}ms")
             count += 1
     except socket.timeout:
         print("Timeout waiting for packet.")

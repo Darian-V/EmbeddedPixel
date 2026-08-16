@@ -1,8 +1,10 @@
 #pragma once
 
-#include "proto/ProtocolTypes.h"
 #include <stddef.h>
 #include <stdint.h>
+
+#include "proto/ProtocolTypes.h"
+#include "ITempSensor.h"
 
 namespace net {
 
@@ -155,4 +157,87 @@ private:
     bool     enabled_;
 };
 
+/**
+ * @brief On-chip DTS temperature telemetry channel ('TEMP').
+ */
+class TemperatureChannel : public ITelemetryChannel {
+public:
+    explicit TemperatureChannel(hal::ITempSensor& sensor, uint16_t sampleRateHz = 1, uint16_t batchCount = 1)
+        : sensor_(sensor),
+          sample_rate_hz_(sampleRateHz),
+          batch_count_(batchCount),
+          enabled_(true) {
+        sensor_.init();
+    }
+
+    uint32_t get_tag() const override {
+        return proto::STREAM_TAG_TEMP;
+    }
+
+    const char* get_name() const override {
+        return "Temperature";
+    }
+
+    uint16_t get_sample_rate_hz() const override {
+        return sample_rate_hz_;
+    }
+
+    void set_sample_rate_hz(uint16_t rate_hz) override {
+        if (rate_hz > 0) {
+            sample_rate_hz_ = rate_hz;
+            batch_count_ = 1;
+        }
+    }
+
+    uint16_t get_batch_count() const override {
+        return batch_count_;
+    }
+
+    void set_batch_count(uint16_t batch) override {
+        batch_count_ = (batch > 0 && batch <= 100) ? batch : 1;
+    }
+
+    uint16_t get_channel_count() const override {
+        return 1;
+    }
+
+    proto::SampleType get_sample_type() const override {
+        return proto::SampleType::INT32;
+    }
+
+    size_t get_bytes_per_sample() const override {
+        return sizeof(int32_t);
+    }
+
+    bool is_enabled() const override {
+        return enabled_;
+    }
+
+    void set_enabled(bool enabled) override {
+        enabled_ = enabled;
+    }
+
+    size_t produce_samples(void* buffer, size_t max_samples) override {
+        if (max_samples < 1 || buffer == nullptr) {
+            return 0;
+        }
+        auto* data = static_cast<int32_t*>(buffer);
+        int32_t temp_c = 0;
+        if (!sensor_.get_temperature(temp_c)) {
+            temp_c = -999;
+        }
+        for (size_t i = 0; i < max_samples; ++i) {
+            data[i] = temp_c;
+        }
+        return max_samples;
+    }
+
+private:
+    hal::ITempSensor& sensor_;
+    uint16_t          sample_rate_hz_;
+    uint16_t          batch_count_;
+    bool              enabled_;
+};
+
 } // namespace net
+
