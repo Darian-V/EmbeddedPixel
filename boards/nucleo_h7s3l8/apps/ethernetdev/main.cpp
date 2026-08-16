@@ -11,6 +11,7 @@
 #include "DiscoveryService.h"
 #include "TelemetryService.h"
 #include "CommandService.h"
+#include "ITelemetryChannel.h"
 
 int main(void) {
     Board_Init();
@@ -46,11 +47,14 @@ int main(void) {
     static net::NetManager netMan(ethDriver, ipCfg);
     static stm32::FreeRtosThread netThread(netMan, "NetManager", 1024, 4);
 
+    // ── Board-Specific Telemetry Channels ──────────────────────────────────
+    static net::CounterChannel counterChannel(10); // 10Hz Monotonic Counter ('CNTR')
+
     // ── Network Services ───────────────────────────────────────────────────
     static net::services::DiscoveryService discoveryService(netMan, NODE_ID);
     static stm32::FreeRtosThread discoveryThread(discoveryService, "DiscoverySvc", 1024, 2);
 
-    static net::services::TelemetryService telemetryService(netMan, NODE_ID);
+    static net::services::TelemetryService telemetryService(netMan, NODE_ID, counterChannel);
     static stm32::FreeRtosThread telemetryThread(telemetryService, "TelemetrySvc", 2048, 4);
 
     static net::services::CommandService commandService(netMan, discoveryService, telemetryService, NODE_ID);
