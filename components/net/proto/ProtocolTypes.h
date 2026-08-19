@@ -39,6 +39,18 @@ enum class MessageType : uint16_t {
     CMD_STOP_STREAM         = 0x0111,
     CMD_GET_STREAMS         = 0x0120,
     CMD_GET_STREAMS_RESP    = 0x0121,
+
+    // OTA Firmware Updates
+    CMD_OTA_BEGIN           = 0x0130,
+    CMD_OTA_BEGIN_RESP      = 0x0131,
+    CMD_OTA_DATA            = 0x0132,
+    CMD_OTA_DATA_RESP       = 0x0133,
+    CMD_OTA_END             = 0x0134,
+    CMD_OTA_END_RESP        = 0x0135,
+    CMD_OTA_GET_STATUS      = 0x0136,
+    CMD_OTA_GET_STATUS_RESP = 0x0137,
+    CMD_OTA_ABORT           = 0x0138,
+
     CMD_REBOOT              = 0x01F0,
     CMD_ACK                 = 0x01FE,
     CMD_NACK                = 0x01FF,
@@ -58,6 +70,9 @@ enum class StatusCode : uint16_t {
     ERR_UNKNOWN_CMD     = 0x0004,
     ERR_INVALID_PAYLOAD = 0x0005,
     ERR_BUSY            = 0x0006,
+    ERR_FLASH_WRITE     = 0x0007,
+    ERR_FLASH_ERASE     = 0x0008,
+    ERR_IMAGE_TOO_LARGE = 0x0009,
     ERR_INTERNAL        = 0x00FF,
 };
 
@@ -152,6 +167,92 @@ struct PayloadAckNack {
     uint32_t result_data;       ///< Return value or error detail
     uint32_t reserved;
 };
+
+/**
+ * @brief Payload for initiating OTA firmware transfer.
+ */
+struct PayloadOtaBegin {
+    uint32_t image_size;        ///< Total firmware size in bytes
+    uint32_t image_crc32;       ///< Expected CRC32 (IEEE 802.3)
+    uint32_t target_version;    ///< Target version (e.g. 0x00010100)
+    uint16_t chunk_size;        ///< Preferred chunk size (e.g. 1024)
+    uint16_t flags;             ///< Bit 0: auto-reboot
+};
+
+static_assert(sizeof(PayloadOtaBegin) == 16, "PayloadOtaBegin must be exactly 16 bytes");
+
+/**
+ * @brief Response payload for CMD_OTA_BEGIN_RESP.
+ */
+struct PayloadOtaBeginResp {
+    uint32_t status_code;       ///< StatusCode value
+    uint16_t chunk_size_ack;    ///< Accepted chunk size
+    uint16_t max_image_size_kb; ///< Maximum supported image size (KB)
+};
+
+static_assert(sizeof(PayloadOtaBeginResp) == 8, "PayloadOtaBeginResp must be exactly 8 bytes");
+
+/**
+ * @brief Payload header for OTA data chunks.
+ */
+struct PayloadOtaData {
+    uint32_t offset;            ///< Offset in bytes from start of image
+    uint16_t chunk_len;         ///< Number of payload data bytes following this struct
+    uint16_t chunk_crc16;       ///< CRC16 of chunk payload
+};
+
+static_assert(sizeof(PayloadOtaData) == 8, "PayloadOtaData must be exactly 8 bytes");
+
+/**
+ * @brief Payload for finalizing OTA transfer.
+ */
+struct PayloadOtaEnd {
+    uint32_t image_crc32;       ///< Final full image CRC32
+    uint8_t  auto_reboot;       ///< 1 = reboot immediately upon success
+    uint8_t  reserved[3];
+};
+
+static_assert(sizeof(PayloadOtaEnd) == 8, "PayloadOtaEnd must be exactly 8 bytes");
+
+/**
+ * @brief Payload for OTA status query response.
+ */
+struct PayloadOtaStatusResp {
+    uint32_t bytes_written;     ///< Bytes successfully written
+    uint32_t total_bytes;       ///< Total image size
+    uint16_t state;             ///< 0=IDLE, 1=RECEIVING, 2=VERIFYING, 3=READY, 4=ERROR
+    uint16_t error_code;        ///< StatusCode value
+};
+
+static_assert(sizeof(PayloadOtaStatusResp) == 12, "PayloadOtaStatusResp must be exactly 12 bytes");
+
+/**
+ * @brief Persistent OTA Control Block located in BKPSRAM (0x38800000) or Flash metadata.
+ */
+constexpr uint32_t OTA_MAGIC = 0x4F544131; // "OTA1"
+constexpr uint32_t OTA_SLOT_A_ADDRESS = 0x70000000;
+constexpr uint32_t OTA_SLOT_B_ADDRESS = 0x70800000;
+constexpr uint32_t OTA_BKPSRAM_ADDRESS = 0x38800000;
+
+enum class OtaState : uint32_t {
+    IDLE            = 0,
+    PENDING_INSTALL = 1,
+    ACTIVE_SUCCESS  = 2,
+    FAILED          = 3,
+};
+
+struct OtaControlBlock {
+    uint32_t magic;             ///< 0x4F544131 ("OTA1")
+    uint32_t state;             ///< OtaState enum value
+    uint32_t image_size;        ///< Total size in bytes
+    uint32_t image_crc32;       ///< Verified CRC32
+    uint32_t target_version;    ///< Target version (0x00010100)
+    uint32_t staging_address;   ///< Flash base address of Slot B (0x70800000)
+    uint32_t active_address;    ///< Flash base address of Slot A (0x70000000)
+    uint32_t struct_crc32;      ///< CRC32 of first 7 fields
+};
+
+static_assert(sizeof(OtaControlBlock) == 32, "OtaControlBlock must be exactly 32 bytes");
 
 // ── FourCC Channel Tags ───────────────────────────────────────────────────
 constexpr uint32_t MAKE_FOURCC(char a, char b, char c, char d) {

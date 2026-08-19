@@ -8,21 +8,12 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
-#if defined(STM32H7RSxx) || defined(STM32H7RS7XX) || defined(STM32H7S3XX) || defined(STM32H7S7XX)
 #include "stm32h7rsxx_hal.h"
-#elif defined(STM32H743xx)
-#include "stm32h7xx_hal.h"
-#endif
 
 static inline void systemReset() {
-#if defined(SCB) && defined(SCB_AIRCR_SYSRESETREQ_Msk)
     __DSB();
-    SCB->AIRCR = ((0x5FAUL << SCB_AIRCR_VECTKEY_Pos) |
-                  (SCB->AIRCR & SCB_AIRCR_PRIGROUP_Msk) |
-                   SCB_AIRCR_SYSRESETREQ_Msk);
-    __DSB();
+    NVIC_SystemReset();
     while (1) { __NOP(); }
-#endif
 }
 
 namespace net::services {
@@ -30,10 +21,12 @@ namespace net::services {
 CommandService::CommandService(NetManager& netManager,
                                DiscoveryService& discoveryService,
                                TelemetryService& telemetryService,
-                               uint16_t nodeId)
+                               uint16_t nodeId,
+                               OtaService* otaService)
     : net_(netManager),
       discovery_(discoveryService),
       telemetry_(telemetryService),
+      ota_(otaService),
       node_id_(nodeId),
       seq_num_(0) {}
 
@@ -91,34 +84,84 @@ void CommandService::run() {
     }
 }
 
+namespace {
+
+class NetconnStreamReader {
+public:
+    explicit NetconnStreamReader(struct netconn* conn)
+        : conn_(conn), cur_buf_(nullptr), buf_offset_(0), buf_len_(0) {}
+
+    ~NetconnStreamReader() {
+        if (cur_buf_ != nullptr) {
+            netbuf_delete(cur_buf_);
+        }
+    }
+
+    bool readExact(uint8_t* dest, size_t needed) {
+        size_t copied = 0;
+        while (copied < needed) {
+            if (cur_buf_ == nullptr || buf_offset_ >= buf_len_) {
+                if (cur_buf_ != nullptr) {
+                    netbuf_delete(cur_buf_);
+                    cur_buf_ = nullptr;
+                }
+                err_t err = netconn_recv(conn_, &cur_buf_);
+                if (err != ERR_OK || cur_buf_ == nullptr) {
+                    return false;
+                }
+                buf_len_ = netbuf_len(cur_buf_);
+                buf_offset_ = 0;
+            }
+
+            size_t available = buf_len_ - buf_offset_;
+            size_t to_copy = (needed - copied < available) ? (needed - copied) : available;
+            netbuf_copy_partial(cur_buf_, dest + copied, to_copy, buf_offset_);
+            buf_offset_ += to_copy;
+            copied += to_copy;
+        }
+        return true;
+    }
+
+private:
+    struct netconn* conn_;
+    struct netbuf*  cur_buf_;
+    size_t          buf_offset_;
+    size_t          buf_len_;
+};
+
+} // namespace
+
 void CommandService::handleClient(struct netconn* clientConn) {
     ip_addr_t client_ip;
     u16_t client_port;
     netconn_peer(clientConn, &client_ip, &client_port);
 
-    while (true) {
-        struct netbuf* rx_buf = nullptr;
-        err_t err = netconn_recv(clientConn, &rx_buf);
+    NetconnStreamReader reader(clientConn);
+    proto::PE_Header hdr;
+    static uint8_t s_payload_buffer[2048];
 
-        if (err != ERR_OK || rx_buf == nullptr) {
-            break; // Connection closed or errored
+    while (true) {
+        if (!reader.readExact(reinterpret_cast<uint8_t*>(&hdr), sizeof(hdr))) {
+            break; // Connection closed
         }
 
-        void* data = nullptr;
-        uint16_t len = 0;
-        netbuf_data(rx_buf, &data, &len);
+        if (hdr.magic != proto::PE_MAGIC) {
+            sendAckNack(clientConn, hdr.msg_type, proto::StatusCode::ERR_INVALID_MAGIC);
+            break;
+        }
 
-        if (len >= sizeof(proto::PE_Header)) {
-            const auto* hdr = static_cast<const proto::PE_Header*>(data);
-            if (proto::PacketHelper::ValidateHeader(*hdr, len) == proto::StatusCode::OK) {
-                const uint8_t* payload = static_cast<const uint8_t*>(data) + sizeof(proto::PE_Header);
-                processCommand(clientConn, *hdr, payload, &client_ip);
-            } else {
-                sendAckNack(clientConn, hdr->msg_type, proto::StatusCode::ERR_INVALID_MAGIC);
+        if (hdr.payload_len > sizeof(s_payload_buffer)) {
+            sendAckNack(clientConn, hdr.msg_type, proto::StatusCode::ERR_INVALID_PAYLOAD);
+            break;
+        }
+
+        if (hdr.payload_len > 0) {
+            if (!reader.readExact(s_payload_buffer, hdr.payload_len)) {
+                break;
             }
         }
 
-        netbuf_delete(rx_buf);
+        processCommand(clientConn, hdr, s_payload_buffer, &client_ip);
     }
 }
 
@@ -146,7 +189,7 @@ void CommandService::processCommand(struct netconn* clientConn,
                 memset(pong->mac_addr, 0, 6);
             }
 
-            pong->fw_version   = 0x00010000;
+            pong->fw_version   = discovery_.get_fw_version();
             pong->uptime_ms    = xTaskGetTickCount() * portTICK_PERIOD_MS;
 #if defined(HAL_GetUIDw0) || defined(STM32H7RSxx) || defined(STM32H7RS7XX) || defined(STM32H7S3XX) || defined(STM32H7S7XX) || defined(STM32H743xx)
             pong->hw_uid[0]    = HAL_GetUIDw0();
@@ -270,6 +313,109 @@ void CommandService::processCommand(struct netconn* clientConn,
             uint16_t total_frame_len = sizeof(proto::PE_Header) + total_payload_len;
             netconn_write(clientConn, tx_buf, total_frame_len, NETCONN_COPY);
             LOG_INFO("CommandService: sent stream list (%u streams)\r\n", static_cast<unsigned>(count));
+            break;
+        }
+
+        case proto::MessageType::CMD_OTA_BEGIN: {
+            if (ota_ == nullptr) {
+                sendAckNack(clientConn, hdr.msg_type, proto::StatusCode::ERR_INTERNAL);
+                break;
+            }
+            if (hdr.payload_len < sizeof(proto::PayloadOtaBegin)) {
+                sendAckNack(clientConn, hdr.msg_type, proto::StatusCode::ERR_INVALID_PAYLOAD);
+                break;
+            }
+            const auto* req = reinterpret_cast<const proto::PayloadOtaBegin*>(payload);
+            uint8_t tx_buf[sizeof(proto::PE_Header) + sizeof(proto::PayloadOtaBeginResp)];
+            auto* resp_hdr = reinterpret_cast<proto::PE_Header*>(tx_buf);
+            auto* resp_body = reinterpret_cast<proto::PayloadOtaBeginResp*>(tx_buf + sizeof(proto::PE_Header));
+
+            proto::StatusCode status = ota_->handleBegin(*req, *resp_body);
+            uint8_t flags = proto::FLAG_IS_RESPONSE;
+            if (status != proto::StatusCode::OK) {
+                flags |= proto::FLAG_ERROR;
+            }
+
+            proto::PacketHelper::PopulateHeader(
+                *resp_hdr,
+                node_id_,
+                proto::MessageType::CMD_OTA_BEGIN_RESP,
+                ++seq_num_,
+                sizeof(proto::PayloadOtaBeginResp),
+                flags,
+                false
+            );
+            netconn_write(clientConn, tx_buf, sizeof(tx_buf), NETCONN_COPY);
+            break;
+        }
+
+        case proto::MessageType::CMD_OTA_DATA: {
+            if (ota_ == nullptr) {
+                sendAckNack(clientConn, hdr.msg_type, proto::StatusCode::ERR_INTERNAL);
+                break;
+            }
+            if (hdr.payload_len < sizeof(proto::PayloadOtaData)) {
+                sendAckNack(clientConn, hdr.msg_type, proto::StatusCode::ERR_INVALID_PAYLOAD);
+                break;
+            }
+            const auto* req = reinterpret_cast<const proto::PayloadOtaData*>(payload);
+            const uint8_t* chunk_bytes = payload + sizeof(proto::PayloadOtaData);
+            uint16_t chunk_len = req->chunk_len;
+
+            proto::StatusCode status = ota_->handleData(*req, chunk_bytes, chunk_len);
+            sendAckNack(clientConn, hdr.msg_type, status, req->offset + chunk_len);
+            break;
+        }
+
+        case proto::MessageType::CMD_OTA_END: {
+            if (ota_ == nullptr) {
+                sendAckNack(clientConn, hdr.msg_type, proto::StatusCode::ERR_INTERNAL);
+                break;
+            }
+            if (hdr.payload_len < sizeof(proto::PayloadOtaEnd)) {
+                sendAckNack(clientConn, hdr.msg_type, proto::StatusCode::ERR_INVALID_PAYLOAD);
+                break;
+            }
+            const auto* req = reinterpret_cast<const proto::PayloadOtaEnd*>(payload);
+            proto::StatusCode status = ota_->handleEnd(*req);
+            sendAckNack(clientConn, hdr.msg_type, status);
+
+            if (ota_->is_reboot_pending()) {
+                LOG_INFO("CommandService: OTA complete. Rebooting in 300ms...\r\n");
+                vTaskDelay(pdMS_TO_TICKS(300));
+                systemReset();
+            }
+            break;
+        }
+
+        case proto::MessageType::CMD_OTA_GET_STATUS: {
+            if (ota_ == nullptr) {
+                sendAckNack(clientConn, hdr.msg_type, proto::StatusCode::ERR_INTERNAL);
+                break;
+            }
+            uint8_t tx_buf[sizeof(proto::PE_Header) + sizeof(proto::PayloadOtaStatusResp)];
+            auto* resp_hdr = reinterpret_cast<proto::PE_Header*>(tx_buf);
+            auto* resp_body = reinterpret_cast<proto::PayloadOtaStatusResp*>(tx_buf + sizeof(proto::PE_Header));
+
+            ota_->getStatus(*resp_body);
+            proto::PacketHelper::PopulateHeader(
+                *resp_hdr,
+                node_id_,
+                proto::MessageType::CMD_OTA_GET_STATUS_RESP,
+                ++seq_num_,
+                sizeof(proto::PayloadOtaStatusResp),
+                proto::FLAG_IS_RESPONSE,
+                false
+            );
+            netconn_write(clientConn, tx_buf, sizeof(tx_buf), NETCONN_COPY);
+            break;
+        }
+
+        case proto::MessageType::CMD_OTA_ABORT: {
+            if (ota_ != nullptr) {
+                ota_->handleAbort();
+            }
+            sendAckNack(clientConn, hdr.msg_type, proto::StatusCode::OK);
             break;
         }
 
