@@ -230,11 +230,11 @@ int main(void)
     console_init(Board_GetDebugUart());
     HAL_Delay(100);
 
-    printf("\r\n");
+    printf("\r\n=== Bootloader Started ===\r\n\r\n");
     for (const auto* line : BOOTLOADER_BANNER_LINES) {
         printf("%s\r\n", line);
     }
-    printf("\r\n=== Bootloader Started ===\r\n");
+    printf("\r\n");
 
     MX_XSPI2_Init();
     printf("XSPI2 Initialized.\r\n");
