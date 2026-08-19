@@ -189,7 +189,21 @@ Build-time network defaults can also be passed via CMake:
 | `NET_NODE_ID` | `1` | Unique node ID (1–65535) |
 | `NET_DHCP_TIMEOUT_MS` | `5000` | DHCP timeout before static fallback (ms) |
 
-### 3. Creating a New Application
+### 3. Ethernet OTA Firmware Updates (Over-The-Air)
+
+The system supports field firmware updates streamed over raw TCP sockets on port `50002`:
+- **Dual-Stage RAM Staging**: Incoming firmware is staged directly into internal AXI SRAM (`staging_buffer_` up to 160 KB).
+- **IEEE 802.3 CRC32 Verification**: Validates end-to-end stream and buffer integrity before arming a soft reset.
+- **Bootloader Flashing**: Bootloader detects `PENDING_INSTALL` in AXI SRAM (`0x24070000`), flashes the external Octal-SPI memory (`0x70000000`), verifies the written flash image, and boots into the new application.
+
+#### Running the OTA Updater CLI:
+```bash
+python scripts/ota_updater.py --ip 192.168.1.111 --bin boards/nucleo_h7s3l8/apps/ethernetdev/programming_files/ethernetdev_v1.1.0_red.bin --version 0x00010100
+```
+
+For desktop integration and packet specifications, see [docs/ETHERNET_OTA_INTEGRATION_GUIDE.md](docs/ETHERNET_OTA_INTEGRATION_GUIDE.md).
+
+### 4. Creating a New Application
 
 A blank starting point exists in `apps/template/`. Copy it and register the new app name in the root `CMakeLists.txt` if it needs `BlinkTask` or other shared components.
 

@@ -17,7 +17,7 @@ namespace net::services {
  */
 class DiscoveryService : public osal::Runnable {
 public:
-    DiscoveryService(NetManager& netManager, uint16_t nodeId, hal::ITempSensor* tempSensor = nullptr);
+    DiscoveryService(NetManager& netManager, uint16_t nodeId, hal::ITempSensor* tempSensor = nullptr, uint32_t fwVersion = 0x00010000);
     ~DiscoveryService() = default;
 
     void run() override;
@@ -28,10 +28,14 @@ public:
     uint16_t get_node_id() const { return node_id_; }
     void set_node_id(uint16_t id) { node_id_ = id; }
 
+    uint32_t get_fw_version() const { return fw_version_; }
+    void set_fw_version(uint32_t ver) { fw_version_ = ver; }
+
 private:
     NetManager&        net_;
     uint16_t           node_id_;
     hal::ITempSensor*  temp_sensor_;
+    uint32_t           fw_version_;
     uint32_t           seq_num_;
     proto::NodeState   state_;
 

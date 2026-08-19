@@ -20,6 +20,8 @@
 #ifndef __STM32_EXTMEM_CONF__H__
 #define __STM32_EXTMEM_CONF__H__
 
+#include "stm32h7rsxx_hal.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

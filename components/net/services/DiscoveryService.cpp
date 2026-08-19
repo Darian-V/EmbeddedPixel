@@ -17,12 +17,13 @@
 
 namespace net::services {
 
-DiscoveryService::DiscoveryService(NetManager& netManager, uint16_t nodeId, hal::ITempSensor* tempSensor)
+DiscoveryService::DiscoveryService(NetManager& netManager, uint16_t nodeId, hal::ITempSensor* tempSensor, uint32_t fwVersion)
     : net_(netManager),
       node_id_(nodeId),
       temp_sensor_(tempSensor),
+      fw_version_(fwVersion),
       seq_num_(0),
-      state_(proto::NodeState::STREAMING) {
+      state_(proto::NodeState::IDLE) {
     if (temp_sensor_ != nullptr) {
         temp_sensor_->init();
     }
@@ -90,7 +91,7 @@ void DiscoveryService::sendHeartbeat(struct netconn* conn) {
     auto* payload = reinterpret_cast<proto::PayloadHeartbeat*>(tx_buffer + sizeof(proto::PE_Header));
 
     payload->uptime_ms       = xTaskGetTickCount() * portTICK_PERIOD_MS;
-    payload->fw_version      = 0x00010000; // v1.0.0
+    payload->fw_version      = fw_version_;
     payload->node_state      = static_cast<uint8_t>(state_);
     payload->active_streams  = (state_ == proto::NodeState::STREAMING) ? 0x01 : 0x00;
     payload->vdd_mv          = 3300;
@@ -176,7 +177,7 @@ void DiscoveryService::handleIncomingPacket(struct netconn* conn, struct netbuf*
             memset(pong->mac_addr, 0, 6);
         }
 
-        pong->fw_version   = 0x00010000;
+        pong->fw_version   = fw_version_;
         pong->uptime_ms    = xTaskGetTickCount() * portTICK_PERIOD_MS;
 
 #if defined(HAL_GetUIDw0) || defined(STM32H7RSxx) || defined(STM32H7RS7XX) || defined(STM32H7S3XX) || defined(STM32H7S7XX) || defined(STM32H743xx)

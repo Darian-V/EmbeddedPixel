@@ -4,6 +4,7 @@
 #include "NetManager.h"
 #include "DiscoveryService.h"
 #include "TelemetryService.h"
+#include "OtaService.h"
 #include "proto/ProtocolTypes.h"
 #include "proto/PacketHelper.h"
 #include "lwip/api.h"
@@ -12,15 +13,18 @@
 namespace net::services {
 
 /**
- * @brief TCP Command server for remote parameter control, RPC, and stream toggling.
+ * @brief TCP Command server for remote parameter control, RPC, stream toggling, and OTA updates.
  */
 class CommandService : public osal::Runnable {
 public:
     CommandService(NetManager& netManager,
                    DiscoveryService& discoveryService,
                    TelemetryService& telemetryService,
-                   uint16_t nodeId);
+                   uint16_t nodeId,
+                   OtaService* otaService = nullptr);
     ~CommandService() = default;
+
+    void set_ota_service(OtaService* otaService) { ota_ = otaService; }
 
     void run() override;
 
@@ -28,6 +32,7 @@ private:
     NetManager&       net_;
     DiscoveryService& discovery_;
     TelemetryService& telemetry_;
+    OtaService*       ota_;
     uint16_t          node_id_;
     uint32_t          seq_num_;
 

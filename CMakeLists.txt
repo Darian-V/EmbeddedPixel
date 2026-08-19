@@ -20,6 +20,8 @@ set(core_includes
     ${CMAKE_SOURCE_DIR}/core/osal
     ${CMAKE_SOURCE_DIR}/components/tasks
     ${CMAKE_SOURCE_DIR}/components/sys
+    ${CMAKE_SOURCE_DIR}/components/net
+    ${CMAKE_SOURCE_DIR}/components/net/proto
 )
 
 target_include_directories(${EXECUTABLE_NAME} PRIVATE
@@ -28,6 +30,7 @@ target_include_directories(${EXECUTABLE_NAME} PRIVATE
 
 set(core_sources
     ${CMAKE_SOURCE_DIR}/components/sys/console.cpp
+    ${CMAKE_SOURCE_DIR}/components/sys/Crc32.cpp
 )
 
 target_sources(${EXECUTABLE_NAME} PRIVATE
@@ -60,13 +63,26 @@ else()
             ${CMAKE_SOURCE_DIR}/components/net/proto
             ${CMAKE_SOURCE_DIR}/components/net/services
             ${CMAKE_SOURCE_DIR}/components/net/lwip_port
+            ${CMAKE_SOURCE_DIR}/vendor/stm32h7rs/Middlewares/ST/STM32_ExtMem_Manager
+            ${CMAKE_SOURCE_DIR}/vendor/stm32h7rs/Middlewares/ST/STM32_ExtMem_Manager/nor_sfdp
+            ${CMAKE_SOURCE_DIR}/vendor/stm32h7rs/Middlewares/ST/STM32_ExtMem_Manager/sal
+            ${CMAKE_SOURCE_DIR}/boards/${BOARD}/apps/bootloader
         )
         target_sources(${EXECUTABLE_NAME} PRIVATE
             ${CMAKE_SOURCE_DIR}/components/net/NetManager.cpp
             ${CMAKE_SOURCE_DIR}/components/net/services/DiscoveryService.cpp
             ${CMAKE_SOURCE_DIR}/components/net/services/TelemetryService.cpp
             ${CMAKE_SOURCE_DIR}/components/net/services/CommandService.cpp
+            ${CMAKE_SOURCE_DIR}/components/net/services/OtaService.cpp
+            ${CMAKE_SOURCE_DIR}/boards/${BOARD}/apps/bootloader/extmem_manager.c
+            ${CMAKE_SOURCE_DIR}/vendor/stm32h7rs/Middlewares/ST/STM32_ExtMem_Manager/stm32_extmem.c
+            ${CMAKE_SOURCE_DIR}/vendor/stm32h7rs/Middlewares/ST/STM32_ExtMem_Manager/nor_sfdp/stm32_sfdp_data.c
+            ${CMAKE_SOURCE_DIR}/vendor/stm32h7rs/Middlewares/ST/STM32_ExtMem_Manager/nor_sfdp/stm32_sfdp_driver.c
+            ${CMAKE_SOURCE_DIR}/vendor/stm32h7rs/Middlewares/ST/STM32_ExtMem_Manager/sal/stm32_sal_xspi.c
         )
+        if(ETHERNETDEV_V2)
+            target_compile_definitions(${EXECUTABLE_NAME} PRIVATE ETHERNETDEV_V2)
+        endif()
     endif()
     if(APP STREQUAL "blinky" OR APP STREQUAL "ethernetdev" OR APP STREQUAL "temp_test")
         target_sources(${EXECUTABLE_NAME} PRIVATE
