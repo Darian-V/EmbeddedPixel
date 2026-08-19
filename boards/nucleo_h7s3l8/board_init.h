@@ -11,6 +11,9 @@ void Board_Init();
 
 // Returns the board's status LED, fully initialized.
 hal::IGpio& Board_GetLed();
+hal::IGpio& Board_GetGreenLed();
+hal::IGpio& Board_GetRedLed();
+hal::IGpio& Board_GetYellowLed();
 
 // Returns the board's debug UART, fully initialized.
 hal::IUart& Board_GetDebugUart();

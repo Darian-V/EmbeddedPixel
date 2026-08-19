@@ -84,7 +84,7 @@ static void MPU_Config(void)
     HAL_MPU_DisableRegion(i);
   }
 
-  /** Initializes and configures the Region and the memory to be protected
+  /** Initializes and configures Region 0 (Background)
   */
   MPU_InitStruct.Enable = MPU_REGION_ENABLE;
   MPU_InitStruct.Number = MPU_REGION_NUMBER0;
@@ -100,7 +100,7 @@ static void MPU_Config(void)
 
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
 
-  /** Initializes and configures the Region and the memory to be protected
+  /** External Flash (128MB at 0x70000000)
   */
   MPU_InitStruct.Number = MPU_REGION_NUMBER1;
   MPU_InitStruct.BaseAddress = 0x70000000;
@@ -177,8 +177,12 @@ hal::IUart& Board_GetDebugUart() {
 
 // Nucleo-H7S3L8: Green LED on PD10
 static stm32::h7::Stm32H7Gpio g_green_led(GPIOD, GPIO_PIN_10);
+// Nucleo-H7S3L8: Red LED on PB7
+static stm32::h7::Stm32H7Gpio g_red_led(GPIOB, GPIO_PIN_7);
+// Nucleo-H7S3L8: Yellow LED on PD13
+static stm32::h7::Stm32H7Gpio g_yellow_led(GPIOD, GPIO_PIN_13);
 
-hal::IGpio& Board_GetLed() {
+hal::IGpio& Board_GetGreenLed() {
     __HAL_RCC_GPIOD_CLK_ENABLE();
     GPIO_InitTypeDef GPIO_InitStruct = {0};
     GPIO_InitStruct.Pin   = GPIO_PIN_10;
@@ -189,10 +193,30 @@ hal::IGpio& Board_GetLed() {
     return g_green_led;
 }
 
-// Nucleo-H7S3L8: Internal DTS Sensor
-static stm32::h7::Stm32H7Dts g_temp_sensor;
-
-hal::ITempSensor& Board_GetTempSensor() {
-    return g_temp_sensor;
+hal::IGpio& Board_GetRedLed() {
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin   = GPIO_PIN_7;
+    GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull  = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+    return g_red_led;
 }
 
+hal::IGpio& Board_GetYellowLed() {
+    __HAL_RCC_GPIOD_CLK_ENABLE();
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin   = GPIO_PIN_13;
+    GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull  = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+    return g_yellow_led;
+}
+
+static stm32::h7::Stm32H7Dts g_dts_sensor;
+
+hal::ITempSensor& Board_GetTempSensor() {
+    return g_dts_sensor;
+}
