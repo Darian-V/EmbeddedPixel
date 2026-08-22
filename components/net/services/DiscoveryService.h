@@ -31,11 +31,23 @@ public:
     uint32_t get_fw_version() const { return fw_version_; }
     void set_fw_version(uint32_t ver) { fw_version_ = ver; }
 
+    uint32_t get_bootloader_version() const { return bootloader_version_; }
+    void set_bootloader_version(uint32_t ver) { bootloader_version_ = ver; }
+
+    uint16_t get_board_id() const { return board_id_; }
+    void set_board_id(uint16_t id) { board_id_ = id; }
+
+    uint32_t get_feature_flags() const { return feature_flags_; }
+    void set_feature_flags(uint32_t flags) { feature_flags_ = flags; }
+
 private:
     NetManager&        net_;
     uint16_t           node_id_;
     hal::ITempSensor*  temp_sensor_;
     uint32_t           fw_version_;
+    uint32_t           bootloader_version_;
+    uint16_t           board_id_;
+    uint32_t           feature_flags_;
     uint32_t           seq_num_;
     proto::NodeState   state_;
 

@@ -74,6 +74,14 @@ SECTIONS
     . = ALIGN(4);
   } >FLASH
 
+  /* Application Image Header at fixed offset 0x200 (512 bytes from flash origin) */
+  .app_header 0x70000200 :
+  {
+    . = ALIGN(4);
+    KEEP(*(.app_header))
+    . = ALIGN(4);
+  } >FLASH
+
   /* The program code and other data into "FLASH" Rom type memory */
   .text :
   {

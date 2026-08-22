@@ -14,23 +14,59 @@
 #include "OtaService.h"
 #include "Stm32ExtMemFlash.h"
 #include "ITelemetryChannel.h"
+#include "Version.h"
+#include "SystemController.h"
+#include "CliEngine.h"
+#include "ConsoleTask.h"
+
+#if defined(FW_V2) || defined(ETHERNETDEV_V2)
+    constexpr uint32_t CURRENT_FW_VERSION = sys::MAKE_VERSION(1, 1, 0, 0); // v1.1.0
+    constexpr uint32_t DEFAULT_BLINK_RATE = 200;
+#else
+    constexpr uint32_t CURRENT_FW_VERSION = sys::MAKE_VERSION(1, 0, 0, 0); // v1.0.0
+    constexpr uint32_t DEFAULT_BLINK_RATE = 500;
+#endif
+
+// ── Application Image Header (Placed at fixed flash offset 0x200 via .app_header)
+__attribute__((section(".app_header"), used))
+static const sys::AppImageHeader s_app_image_header = {
+    .magic                  = sys::EPFW_MAGIC,
+    .header_version         = sys::EPFW_HEADER_VERSION,
+    .board_id               = static_cast<uint16_t>(sys::BoardId::NUCLEO_H7S3L8),
+    .app_version            = CURRENT_FW_VERSION,
+    .min_bootloader_version = sys::MAKE_VERSION(1, 0, 0, 0),
+    .feature_flags          = static_cast<uint32_t>(
+        sys::FeatureFlag::FEAT_ETHERNET_LAN8742 |
+        sys::FeatureFlag::FEAT_TELEMETRY_STREAM |
+        sys::FeatureFlag::FEAT_TEMP_SENSOR_DTS  |
+        sys::FeatureFlag::FEAT_OTA_RAM_STAGING  |
+        sys::FeatureFlag::FEAT_DYNAMIC_RATE     |
+        sys::FeatureFlag::FEAT_UART_CLI
+    ),
+    .image_size             = 0,
+    .image_crc32            = 0,
+    .build_timestamp        = 0,
+    .git_commit             = 0,
+    .reserved               = {0},
+    .header_crc32           = 0,
+};
 
 int main(void) {
     Board_Init();
     console_init(Board_GetDebugUart());
 
+    char ver_str[24];
+    sys::format_version(CURRENT_FW_VERSION, ver_str, sizeof(ver_str));
+
 #if defined(FW_V2) || defined(ETHERNETDEV_V2)
-    constexpr uint32_t CURRENT_FW_VERSION = 0x00010100; // v1.1.0
-    printf("\r\n=== EthernetDev v1.1.0 (Red LED PB7 @ 200ms) ===\r\n");
+    printf("\r\n=== EthernetDev %s (Red LED PB7 @ %lums) ===\r\n", ver_str, DEFAULT_BLINK_RATE);
     static hal::IGpio& led = Board_GetRedLed();
-    static app::BlinkTask blinky(led, 200);
 #else
-    constexpr uint32_t CURRENT_FW_VERSION = 0x00010000; // v1.0.0
-    printf("\r\n=== EthernetDev v1.0.0 (Green LED PD10 @ 500ms) ===\r\n");
+    printf("\r\n=== EthernetDev %s (Green LED PD10 @ %lums) ===\r\n", ver_str, DEFAULT_BLINK_RATE);
     static hal::IGpio& led = Board_GetGreenLed();
-    static app::BlinkTask blinky(led, 500);
 #endif
 
+    static app::BlinkTask blinky(led, DEFAULT_BLINK_RATE);
     static stm32::FreeRtosThread blinkThread(blinky, "BlinkTask", 256, 3);
 
     // ── Ethernet driver configuration ──────────────────────────────────────
@@ -78,11 +114,35 @@ int main(void) {
     static net::services::CommandService commandService(netMan, discoveryService, telemetryService, NODE_ID, &otaService);
     static stm32::FreeRtosThread commandThread(commandService, "CommandSvc", 2048, 3);
 
+    // ── Central System Controller & Unified CLI Engine ─────────────────────
+    static sys::SystemController sysCtrl(NODE_ID,
+                                         s_app_image_header,
+                                         &netMan,
+                                         &tempSensor,
+                                         &blinky,
+                                         &telemetryService,
+                                         &otaService,
+                                         &discoveryService);
+    sysCtrl.init();
+
+    static sys::CliEngine cliEngine(sysCtrl);
+    static sys::ConsoleTask consoleTask(Board_GetDebugUart(), cliEngine);
+    static stm32::FreeRtosThread consoleThread(consoleTask, "ConsoleCLI", 1024, 2);
+
+    // Wire dependencies into services
+    otaService.set_system_controller(&sysCtrl);
+    discoveryService.set_bootloader_version(sysCtrl.get_bootloader_version());
+    discoveryService.set_board_id(sysCtrl.get_board_id());
+    discoveryService.set_feature_flags(sysCtrl.get_feature_flags());
+    commandService.set_system_controller(&sysCtrl);
+    commandService.set_cli_engine(&cliEngine);
+
     blinkThread.start();
     netThread.start();
     discoveryThread.start();
     telemetryThread.start();
     commandThread.start();
+    consoleThread.start();
 
     vTaskStartScheduler();
 

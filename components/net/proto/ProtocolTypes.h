@@ -51,6 +51,10 @@ enum class MessageType : uint16_t {
     CMD_OTA_GET_STATUS_RESP = 0x0137,
     CMD_OTA_ABORT           = 0x0138,
 
+    // Unified CLI Command Execution (Text commands over TCP/UART)
+    CMD_CLI_EXEC            = 0x0150,
+    CMD_CLI_EXEC_RESP       = 0x0151,
+
     CMD_REBOOT              = 0x01F0,
     CMD_ACK                 = 0x01FE,
     CMD_NACK                = 0x01FF,
@@ -63,17 +67,21 @@ enum class MessageType : uint16_t {
 
 // ── Status Codes ───────────────────────────────────────────────────────────
 enum class StatusCode : uint16_t {
-    OK                  = 0x0000,
-    ERR_INVALID_MAGIC   = 0x0001,
-    ERR_INVALID_VERSION = 0x0002,
-    ERR_INVALID_CRC     = 0x0003,
-    ERR_UNKNOWN_CMD     = 0x0004,
-    ERR_INVALID_PAYLOAD = 0x0005,
-    ERR_BUSY            = 0x0006,
-    ERR_FLASH_WRITE     = 0x0007,
-    ERR_FLASH_ERASE     = 0x0008,
-    ERR_IMAGE_TOO_LARGE = 0x0009,
-    ERR_INTERNAL        = 0x00FF,
+    OK                          = 0x0000,
+    ERR_INVALID_MAGIC           = 0x0001,
+    ERR_INVALID_VERSION         = 0x0002,
+    ERR_INVALID_CRC             = 0x0003,
+    ERR_UNKNOWN_CMD             = 0x0004,
+    ERR_INVALID_PAYLOAD         = 0x0005,
+    ERR_BUSY                    = 0x0006,
+    ERR_FLASH_WRITE             = 0x0007,
+    ERR_FLASH_ERASE             = 0x0008,
+    ERR_IMAGE_TOO_LARGE         = 0x0009,
+    ERR_OTA_DISABLED            = 0x000A,
+    ERR_INCOMPATIBLE_BOARD      = 0x000B,
+    ERR_INCOMPATIBLE_BOOTLOADER = 0x000C,
+    ERR_VERSION_DOWNGRADE       = 0x000D,
+    ERR_INTERNAL                = 0x00FF,
 };
 
 // ── Node State ─────────────────────────────────────────────────────────────
@@ -122,8 +130,10 @@ struct PayloadHeartbeat {
     uint8_t  active_streams;    ///< Active stream bitmask
     uint16_t vdd_mv;            ///< Supply voltage in mV
     int16_t  core_temp_c_x10;   ///< Core junction temperature (0.1 C)
-    uint16_t reserved;
+    uint16_t feature_flags_low; ///< Lower 16 bits of FeatureFlag bitmask
 };
+
+static_assert(sizeof(PayloadHeartbeat) == 16, "PayloadHeartbeat must be exactly 16 bytes");
 
 /**
  * @brief Payload for host discovery probe.
@@ -138,15 +148,35 @@ struct PayloadDiscoveryPing {
  * @brief Payload for node discovery response.
  */
 struct PayloadDiscoveryPong {
-    uint32_t challenge_id;      ///< Echoed challenge ID
-    uint16_t node_id;           ///< Node ID
-    uint16_t node_state;        ///< NodeState enum value
-    uint32_t ip_addr;           ///< Current IP (Network order)
-    uint8_t  mac_addr[6];       ///< MAC address
-    uint16_t reserved;
-    uint32_t fw_version;        ///< Firmware version
-    uint32_t uptime_ms;         ///< Uptime in ms
-    uint32_t hw_uid[3];         ///< 96-bit STM32 Hardware UID
+    uint32_t challenge_id;       ///< Echoed challenge ID
+    uint16_t node_id;            ///< Node ID
+    uint16_t node_state;         ///< NodeState enum value
+    uint32_t ip_addr;            ///< Current IP (Network order)
+    uint8_t  mac_addr[6];        ///< MAC address
+    uint16_t board_id;           ///< Board ID (e.g., 0x0001 for Nucleo-H7S3L8)
+    uint32_t fw_version;         ///< Active Application Firmware version
+    uint32_t uptime_ms;          ///< Uptime in ms
+    uint32_t hw_uid[3];          ///< 96-bit STM32 Hardware UID
+    uint32_t bootloader_version; ///< Active Bootloader version
+    uint32_t feature_flags;      ///< Active FeatureFlag bitmask
+};
+
+static_assert(sizeof(PayloadDiscoveryPong) == 48, "PayloadDiscoveryPong must be exactly 48 bytes");
+
+/**
+ * @brief Payload for executing text CLI commands over TCP.
+ */
+struct PayloadCliExec {
+    uint16_t cmd_len;           ///< Length of ASCII command text
+    uint16_t flags;             ///< Reserved
+};
+
+/**
+ * @brief Response payload for CLI command execution.
+ */
+struct PayloadCliExecResp {
+    uint16_t status_code;       ///< StatusCode value
+    uint16_t resp_len;          ///< Length of ASCII response text
 };
 
 /**

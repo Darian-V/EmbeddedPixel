@@ -3,6 +3,7 @@
 #include "extmem_manager.h"
 #include "console.h"
 #include "Crc32.h"
+#include "Version.h"
 #include "proto/ProtocolTypes.h"
 #include <stdio.h>
 #include <string.h>
@@ -12,6 +13,8 @@ using namespace net::proto;
 // Define the application's base address in external flash
 #define APPLICATION_ADDRESS     0x70000000
 #define RAM_CONTROL_BLOCK_BASE  0x24070000
+
+constexpr uint32_t BOOTLOADER_VERSION = sys::MAKE_VERSION(1, 0, 0, 0); // v1.0.0
 
 XSPI_HandleTypeDef hxspi2;
 XSPI_HandleTypeDef hxspi1; // Added for EXTMEM macro dependencies
@@ -49,6 +52,22 @@ void EXTMEM_TRACE(uint8_t *Message) {
     (void)Message;
 }
 
+static void write_boot_info(sys::BootReason reason) {
+    sys::BootInfo info = {};
+    info.magic              = sys::BOOT_INFO_MAGIC;
+    info.bootloader_version = BOOTLOADER_VERSION;
+    info.boot_reason        = static_cast<uint32_t>(reason);
+    info.active_slot        = 0;
+    info.boot_count         = 1;
+    info.struct_crc32       = sys::Crc32::Calculate(&info, sizeof(info) - sizeof(info.struct_crc32));
+
+    auto* ram_info = reinterpret_cast<sys::BootInfo*>(sys::BOOT_INFO_RAM_ADDRESS);
+    *ram_info = info;
+    SCB_CleanDCache_by_Addr(reinterpret_cast<uint32_t*>(sys::BOOT_INFO_RAM_ADDRESS), sizeof(sys::BootInfo));
+    __DSB();
+    __ISB();
+}
+
 static void check_and_install_ota() {
     net::proto::OtaControlBlock blk = {0};
     bool found_valid_block = false;
@@ -74,11 +93,13 @@ static void check_and_install_ota() {
     }
 
     if (!found_valid_block) {
+        write_boot_info(sys::BootReason::POWER_ON);
         return;
     }
 
     if (blk.image_size == 0 || blk.image_size > 8 * 1024 * 1024) {
         printf("OTA: Invalid staged size: %lu bytes\r\n", blk.image_size);
+        write_boot_info(sys::BootReason::POWER_ON);
         return;
     }
 
@@ -110,7 +131,49 @@ static void check_and_install_ota() {
                staged_crc32, blk.image_crc32);
         memset(reinterpret_cast<void*>(RAM_CONTROL_BLOCK_BASE), 0, sizeof(blk));
         SCB_CleanDCache_by_Addr(reinterpret_cast<uint32_t*>(RAM_CONTROL_BLOCK_BASE), sizeof(blk));
+        write_boot_info(sys::BootReason::FAULT);
         return;
+    }
+
+    // 1b. Inspect Embedded AppImageHeader at offset 0x200 (if present)
+    if (blk.image_size >= sys::APP_HEADER_FLASH_OFFSET + sizeof(sys::AppImageHeader)) {
+        const auto* app_hdr = reinterpret_cast<const sys::AppImageHeader*>(
+            blk.staging_address + sys::APP_HEADER_FLASH_OFFSET
+        );
+
+        if (app_hdr->magic == sys::EPFW_MAGIC) {
+            printf("OTA: AppImageHeader detected:\r\n");
+            printf("     App Version:    0x%08lX\r\n", app_hdr->app_version);
+            printf("     Board ID:       0x%04X (%s)\r\n", app_hdr->board_id, sys::get_board_name(app_hdr->board_id));
+            printf("     Min BL Version: 0x%08lX\r\n", app_hdr->min_bootloader_version);
+            printf("     Feature Flags:  0x%08lX\r\n", app_hdr->feature_flags);
+
+            if (!app_hdr->isValid()) {
+                printf("OTA: AppImageHeader checksum verification FAILED! Aborting.\r\n");
+                memset(reinterpret_cast<void*>(RAM_CONTROL_BLOCK_BASE), 0, sizeof(blk));
+                SCB_CleanDCache_by_Addr(reinterpret_cast<uint32_t*>(RAM_CONTROL_BLOCK_BASE), sizeof(blk));
+                write_boot_info(sys::BootReason::FAULT);
+                return;
+            }
+
+            if (app_hdr->board_id != static_cast<uint16_t>(sys::BoardId::NUCLEO_H7S3L8)) {
+                printf("OTA: Incompatible Board ID! (got 0x%04X, expected 0x%04X). Aborting.\r\n",
+                       app_hdr->board_id, (unsigned)sys::BoardId::NUCLEO_H7S3L8);
+                memset(reinterpret_cast<void*>(RAM_CONTROL_BLOCK_BASE), 0, sizeof(blk));
+                SCB_CleanDCache_by_Addr(reinterpret_cast<uint32_t*>(RAM_CONTROL_BLOCK_BASE), sizeof(blk));
+                write_boot_info(sys::BootReason::FAULT);
+                return;
+            }
+
+            if (BOOTLOADER_VERSION < app_hdr->min_bootloader_version) {
+                printf("OTA: Bootloader version too low! (BL: 0x%08lX, Min required: 0x%08lX). Aborting.\r\n",
+                       BOOTLOADER_VERSION, app_hdr->min_bootloader_version);
+                memset(reinterpret_cast<void*>(RAM_CONTROL_BLOCK_BASE), 0, sizeof(blk));
+                SCB_CleanDCache_by_Addr(reinterpret_cast<uint32_t*>(RAM_CONTROL_BLOCK_BASE), sizeof(blk));
+                write_boot_info(sys::BootReason::FAULT);
+                return;
+            }
+        }
     }
 
     // 2. Erase Slot A (0x00000000 in External Flash)
@@ -120,6 +183,7 @@ static void check_and_install_ota() {
     while (cur < erase_size) {
         if (EXTMEM_EraseSector(0, cur, 4096) != EXTMEM_OK) {
             printf("OTA: Slot A erase failed at offset 0x%08lX!\r\n", cur);
+            write_boot_info(sys::BootReason::FAULT);
             return;
         }
         cur += 4096;
@@ -147,6 +211,7 @@ static void check_and_install_ota() {
 
     if (!write_ok) {
         printf("OTA: Firmware write to Slot A failed!\r\n");
+        write_boot_info(sys::BootReason::FAULT);
         return;
     }
 
@@ -171,6 +236,7 @@ static void check_and_install_ota() {
     if (!read_ok || slot_a_crc32 != blk.image_crc32) {
         printf("OTA: Slot A verification FAILED (0x%08lX vs 0x%08lX)!\r\n",
                slot_a_crc32, blk.image_crc32);
+        write_boot_info(sys::BootReason::FAULT);
         return;
     }
 
@@ -179,6 +245,7 @@ static void check_and_install_ota() {
     SCB_CleanDCache_by_Addr(reinterpret_cast<uint32_t*>(RAM_CONTROL_BLOCK_BASE), sizeof(blk));
 
     printf("OTA: Installation SUCCESSFUL! Updated to version 0x%08lX.\r\n\r\n", blk.target_version);
+    write_boot_info(sys::BootReason::OTA_UPDATE);
 }
 
 typedef void (*pFunction)(void);

@@ -1,12 +1,14 @@
 #include "OtaService.h"
+#include "SystemController.h"
 #include "net_log.h"
 #include "stm32h7rsxx_hal.h"
 #include <string.h>
 
 namespace net::services {
 
-OtaService::OtaService(hal::IFlashDriver& flashDriver)
+OtaService::OtaService(hal::IFlashDriver& flashDriver, sys::SystemController* sysCtrl)
     : flash_(flashDriver),
+      sys_ctrl_(sysCtrl),
       state_(InternalState::IDLE),
       last_error_(proto::StatusCode::OK),
       total_image_size_(0),
@@ -21,6 +23,13 @@ proto::StatusCode OtaService::handleBegin(const proto::PayloadOtaBegin& req,
                                           proto::PayloadOtaBeginResp& resp) {
     LOG_INFO("OTA: Begin requested (size=%lu B, crc=0x%08lX, ver=0x%08lX)\r\n",
              req.image_size, req.image_crc32, req.target_version);
+
+    if (sys_ctrl_ != nullptr && !sys_ctrl_->is_feature_enabled(sys::FeatureFlag::FEAT_OTA_RAM_STAGING)) {
+        LOG_ERR("OTA: OTA updates are currently DISABLED on this node!\r\n");
+        last_error_ = proto::StatusCode::ERR_OTA_DISABLED;
+        resp.status_code = static_cast<uint32_t>(last_error_);
+        return last_error_;
+    }
 
     if (req.image_size == 0 || req.image_size > MAX_IMAGE_SIZE) {
         last_error_ = proto::StatusCode::ERR_IMAGE_TOO_LARGE;
@@ -81,6 +90,31 @@ proto::StatusCode OtaService::handleData(const proto::PayloadOtaData& req,
     incremental_crc_ = sys::Crc32::Update(incremental_crc_, chunkData, dataLen);
 
     bytes_written_ = req.offset + dataLen;
+
+    // Check AppImageHeader early if header range is received
+    if (bytes_written_ >= sys::APP_HEADER_FLASH_OFFSET + sizeof(sys::AppImageHeader)) {
+        const auto* app_hdr = reinterpret_cast<const sys::AppImageHeader*>(&staging_buffer_[sys::APP_HEADER_FLASH_OFFSET]);
+        if (app_hdr->magic == sys::EPFW_MAGIC) {
+            if (!app_hdr->isValid()) {
+                LOG_ERR("OTA: AppImageHeader CRC verification failed!\r\n");
+                last_error_ = proto::StatusCode::ERR_INVALID_CRC;
+                return last_error_;
+            }
+            if (sys_ctrl_ != nullptr && app_hdr->board_id != sys_ctrl_->get_board_id()) {
+                LOG_ERR("OTA: Incompatible Board ID (0x%04X vs 0x%04X)!\r\n",
+                        app_hdr->board_id, sys_ctrl_->get_board_id());
+                last_error_ = proto::StatusCode::ERR_INCOMPATIBLE_BOARD;
+                return last_error_;
+            }
+            if (sys_ctrl_ != nullptr && sys_ctrl_->get_bootloader_version() < app_hdr->min_bootloader_version) {
+                LOG_ERR("OTA: Bootloader version too low (0x%08lX < 0x%08lX)!\r\n",
+                        sys_ctrl_->get_bootloader_version(), app_hdr->min_bootloader_version);
+                last_error_ = proto::StatusCode::ERR_INCOMPATIBLE_BOOTLOADER;
+                return last_error_;
+            }
+        }
+    }
+
     return proto::StatusCode::OK;
 }
 

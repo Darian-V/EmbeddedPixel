@@ -1,4 +1,6 @@
 #include "CommandService.h"
+#include "SystemController.h"
+#include "CliEngine.h"
 #include "net_log.h"
 
 // lwIP
@@ -22,11 +24,15 @@ CommandService::CommandService(NetManager& netManager,
                                DiscoveryService& discoveryService,
                                TelemetryService& telemetryService,
                                uint16_t nodeId,
-                               OtaService* otaService)
+                               OtaService* otaService,
+                               sys::SystemController* sysCtrl,
+                               sys::CliEngine* cli)
     : net_(netManager),
       discovery_(discoveryService),
       telemetry_(telemetryService),
       ota_(otaService),
+      sys_ctrl_(sysCtrl),
+      cli_(cli),
       node_id_(nodeId),
       seq_num_(0) {}
 
@@ -177,10 +183,10 @@ void CommandService::processCommand(struct netconn* clientConn,
             auto* resp_hdr = reinterpret_cast<proto::PE_Header*>(tx_buf);
             auto* pong = reinterpret_cast<proto::PayloadDiscoveryPong*>(tx_buf + sizeof(proto::PE_Header));
 
-            pong->challenge_id = 0;
-            pong->node_id      = node_id_;
-            pong->node_state   = static_cast<uint16_t>(discovery_.get_state());
-            pong->ip_addr      = net_.get_ip_addr();
+            pong->challenge_id       = 0;
+            pong->node_id            = node_id_;
+            pong->node_state         = static_cast<uint16_t>(discovery_.get_state());
+            pong->ip_addr            = net_.get_ip_addr();
 
             const uint8_t* mac = net_.get_mac_addr();
             if (mac != nullptr) {
@@ -189,17 +195,20 @@ void CommandService::processCommand(struct netconn* clientConn,
                 memset(pong->mac_addr, 0, 6);
             }
 
-            pong->fw_version   = discovery_.get_fw_version();
-            pong->uptime_ms    = xTaskGetTickCount() * portTICK_PERIOD_MS;
+            pong->board_id           = (sys_ctrl_ != nullptr) ? sys_ctrl_->get_board_id() : discovery_.get_board_id();
+            pong->fw_version         = (sys_ctrl_ != nullptr) ? sys_ctrl_->get_app_version() : discovery_.get_fw_version();
+            pong->uptime_ms          = xTaskGetTickCount() * portTICK_PERIOD_MS;
 #if defined(HAL_GetUIDw0) || defined(STM32H7RSxx) || defined(STM32H7RS7XX) || defined(STM32H7S3XX) || defined(STM32H7S7XX) || defined(STM32H743xx)
-            pong->hw_uid[0]    = HAL_GetUIDw0();
-            pong->hw_uid[1]    = HAL_GetUIDw1();
-            pong->hw_uid[2]    = HAL_GetUIDw2();
+            pong->hw_uid[0]          = HAL_GetUIDw0();
+            pong->hw_uid[1]          = HAL_GetUIDw1();
+            pong->hw_uid[2]          = HAL_GetUIDw2();
 #else
-            pong->hw_uid[0]    = 0;
-            pong->hw_uid[1]    = 0;
-            pong->hw_uid[2]    = 0;
+            pong->hw_uid[0]          = 0;
+            pong->hw_uid[1]          = 0;
+            pong->hw_uid[2]          = 0;
 #endif
+            pong->bootloader_version = (sys_ctrl_ != nullptr) ? sys_ctrl_->get_bootloader_version() : discovery_.get_bootloader_version();
+            pong->feature_flags      = (sys_ctrl_ != nullptr) ? sys_ctrl_->get_feature_flags() : discovery_.get_feature_flags();
 
             proto::PacketHelper::PopulateHeader(
                 *resp_hdr,
@@ -416,6 +425,48 @@ void CommandService::processCommand(struct netconn* clientConn,
                 ota_->handleAbort();
             }
             sendAckNack(clientConn, hdr.msg_type, proto::StatusCode::OK);
+            break;
+        }
+
+        case proto::MessageType::CMD_CLI_EXEC: {
+            if (cli_ == nullptr) {
+                sendAckNack(clientConn, hdr.msg_type, proto::StatusCode::ERR_INTERNAL);
+                break;
+            }
+
+            char cmd_str[128] = {0};
+            size_t copy_len = (hdr.payload_len < sizeof(cmd_str) - 1) ? hdr.payload_len : sizeof(cmd_str) - 1;
+            if (copy_len > 0) {
+                memcpy(cmd_str, payload, copy_len);
+                cmd_str[copy_len] = '\0';
+            }
+
+            char resp_str[512] = {0};
+            int resp_len = cli_->execute(cmd_str, resp_str, sizeof(resp_str));
+
+            uint8_t tx_buf[sizeof(proto::PE_Header) + sizeof(proto::PayloadCliExecResp) + sizeof(resp_str)];
+            auto* resp_hdr = reinterpret_cast<proto::PE_Header*>(tx_buf);
+            auto* resp_body = reinterpret_cast<proto::PayloadCliExecResp*>(tx_buf + sizeof(proto::PE_Header));
+            char* resp_text = reinterpret_cast<char*>(tx_buf + sizeof(proto::PE_Header) + sizeof(proto::PayloadCliExecResp));
+
+            resp_body->status_code = static_cast<uint16_t>(proto::StatusCode::OK);
+            resp_body->resp_len    = static_cast<uint16_t>(resp_len);
+            if (resp_len > 0) {
+                memcpy(resp_text, resp_str, resp_len);
+            }
+
+            uint16_t total_payload_len = sizeof(proto::PayloadCliExecResp) + resp_len;
+            proto::PacketHelper::PopulateHeader(
+                *resp_hdr,
+                node_id_,
+                proto::MessageType::CMD_CLI_EXEC_RESP,
+                ++seq_num_,
+                total_payload_len,
+                proto::FLAG_IS_RESPONSE,
+                false
+            );
+
+            netconn_write(clientConn, tx_buf, sizeof(proto::PE_Header) + total_payload_len, NETCONN_COPY);
             break;
         }
 

@@ -30,5 +30,9 @@ bool Stm32H7Uart::receive(uint8_t* data, size_t length) {
     return HAL_UART_Receive(&huart_, data, static_cast<uint16_t>(length), HAL_MAX_DELAY) == HAL_OK;
 }
 
+bool Stm32H7Uart::receive_byte(uint8_t& byte, uint32_t timeout_ms) {
+    return HAL_UART_Receive(&huart_, &byte, 1, timeout_ms) == HAL_OK;
+}
+
 } // namespace h7
 } // namespace stm32

@@ -22,6 +22,9 @@ DiscoveryService::DiscoveryService(NetManager& netManager, uint16_t nodeId, hal:
       node_id_(nodeId),
       temp_sensor_(tempSensor),
       fw_version_(fwVersion),
+      bootloader_version_(0x01000000),
+      board_id_(0x0001),
+      feature_flags_(0),
       seq_num_(0),
       state_(proto::NodeState::IDLE) {
     if (temp_sensor_ != nullptr) {
@@ -103,8 +106,8 @@ void DiscoveryService::sendHeartbeat(struct netconn* conn) {
             temp_c_x10 = static_cast<int16_t>(current_temp * 10);
         }
     }
-    payload->core_temp_c_x10 = temp_c_x10;
-    payload->reserved        = 0;
+    payload->core_temp_c_x10   = temp_c_x10;
+    payload->feature_flags_low = static_cast<uint16_t>(feature_flags_ & 0xFFFF);
 
     proto::PacketHelper::PopulateHeader(
         *hdr,
@@ -165,10 +168,10 @@ void DiscoveryService::handleIncomingPacket(struct netconn* conn, struct netbuf*
         auto* resp_hdr = reinterpret_cast<proto::PE_Header*>(tx_buffer);
         auto* pong = reinterpret_cast<proto::PayloadDiscoveryPong*>(tx_buffer + sizeof(proto::PE_Header));
 
-        pong->challenge_id = ping->challenge_id;
-        pong->node_id      = node_id_;
-        pong->node_state   = static_cast<uint16_t>(state_);
-        pong->ip_addr      = net_.get_ip_addr();
+        pong->challenge_id       = ping->challenge_id;
+        pong->node_id            = node_id_;
+        pong->node_state         = static_cast<uint16_t>(state_);
+        pong->ip_addr            = net_.get_ip_addr();
         
         const uint8_t* mac = net_.get_mac_addr();
         if (mac != nullptr) {
@@ -177,8 +180,9 @@ void DiscoveryService::handleIncomingPacket(struct netconn* conn, struct netbuf*
             memset(pong->mac_addr, 0, 6);
         }
 
-        pong->fw_version   = fw_version_;
-        pong->uptime_ms    = xTaskGetTickCount() * portTICK_PERIOD_MS;
+        pong->board_id           = board_id_;
+        pong->fw_version         = fw_version_;
+        pong->uptime_ms          = xTaskGetTickCount() * portTICK_PERIOD_MS;
 
 #if defined(HAL_GetUIDw0) || defined(STM32H7RSxx) || defined(STM32H7RS7XX) || defined(STM32H7S3XX) || defined(STM32H7S7XX) || defined(STM32H743xx)
         pong->hw_uid[0] = HAL_GetUIDw0();
@@ -189,6 +193,9 @@ void DiscoveryService::handleIncomingPacket(struct netconn* conn, struct netbuf*
         pong->hw_uid[1] = 0;
         pong->hw_uid[2] = 0;
 #endif
+
+        pong->bootloader_version = bootloader_version_;
+        pong->feature_flags      = feature_flags_;
 
         proto::PacketHelper::PopulateHeader(
             *resp_hdr,

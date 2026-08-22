@@ -69,6 +69,9 @@ else()
             ${CMAKE_SOURCE_DIR}/boards/${BOARD}/apps/bootloader
         )
         target_sources(${EXECUTABLE_NAME} PRIVATE
+            ${CMAKE_SOURCE_DIR}/components/sys/SystemController.cpp
+            ${CMAKE_SOURCE_DIR}/components/sys/CliEngine.cpp
+            ${CMAKE_SOURCE_DIR}/components/sys/ConsoleTask.cpp
             ${CMAKE_SOURCE_DIR}/components/net/NetManager.cpp
             ${CMAKE_SOURCE_DIR}/components/net/services/DiscoveryService.cpp
             ${CMAKE_SOURCE_DIR}/components/net/services/TelemetryService.cpp

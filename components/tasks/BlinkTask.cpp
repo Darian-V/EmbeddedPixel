@@ -7,15 +7,11 @@ BlinkTask::BlinkTask(hal::IGpio& led, uint32_t blinkPeriodMs)
 }
 
 void BlinkTask::run() {
-    bool isOn = false;
     while (true) {
         m_led.toggle();
-        isOn = !isOn;
-        if (isOn) {
-            osal::Thread::delay(1000);
-        } else {
-            osal::Thread::delay(4000);
-        }
+        uint32_t delayMs = m_blinkPeriodMs;
+        if (delayMs < 10) delayMs = 10;
+        osal::Thread::delay(delayMs);
     }
 }
 
