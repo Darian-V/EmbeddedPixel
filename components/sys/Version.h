@@ -60,6 +60,7 @@ enum class FeatureFlag : uint32_t {
     FEAT_SECURE_BOOT      = (1 << 6),  ///< Cryptographically signed firmware
     FEAT_DYNAMIC_RATE     = (1 << 7),  ///< Runtime dynamic sampling rate configuration
     FEAT_UART_CLI         = (1 << 8),  ///< Interactive UART CLI on COM port
+    FEAT_TIME_SYNC        = (1 << 9),  ///< Disciplined local clock & UTC epoch time sync
 };
 
 constexpr uint32_t operator|(FeatureFlag a, FeatureFlag b) {
@@ -85,6 +86,7 @@ inline const char* get_feature_name(FeatureFlag flag) {
         case FeatureFlag::FEAT_SECURE_BOOT:      return "secboot";
         case FeatureFlag::FEAT_DYNAMIC_RATE:     return "dynrate";
         case FeatureFlag::FEAT_UART_CLI:         return "cli";
+        case FeatureFlag::FEAT_TIME_SYNC:        return "timesync";
         default:                                 return "unknown";
     }
 }
@@ -97,8 +99,10 @@ inline FeatureFlag parse_feature_name(const char* name) {
     if (strcmp(name, "ethernet") == 0)  return FeatureFlag::FEAT_ETHERNET_LAN8742;
     if (strcmp(name, "dynrate") == 0)   return FeatureFlag::FEAT_DYNAMIC_RATE;
     if (strcmp(name, "cli") == 0)       return FeatureFlag::FEAT_UART_CLI;
+    if (strcmp(name, "timesync") == 0 || strcmp(name, "time") == 0) return FeatureFlag::FEAT_TIME_SYNC;
     return FeatureFlag::NONE;
 }
+
 
 // ── Application Image Header (Offset 0x200 in Binary) ──────────────────────
 #pragma pack(push, 1)

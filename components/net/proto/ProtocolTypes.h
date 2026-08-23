@@ -28,6 +28,8 @@ enum class MessageType : uint16_t {
     DISCOVERY_PONG          = 0x0003,
     TIME_SYNC_REQ           = 0x0010,
     TIME_SYNC_RESP          = 0x0011,
+    TIME_SYNC_BEACON        = 0x0012,
+
 
     // Control & RPC
     CMD_GET_NODE_INFO       = 0x0100,
@@ -162,6 +164,31 @@ struct PayloadDiscoveryPong {
 };
 
 static_assert(sizeof(PayloadDiscoveryPong) == 48, "PayloadDiscoveryPong must be exactly 48 bytes");
+
+/**
+ * @brief Payload for 2-way RTT time synchronization (32 bytes).
+ */
+struct PayloadTimeSync {
+    uint64_t t1_host_tx_us;     ///< Host Tx timestamp (Host UTC epoch us)
+    uint64_t t2_node_rx_us;     ///< Node Rx timestamp (Local hardware time us)
+    uint64_t t3_node_tx_us;     ///< Node Tx timestamp (Local hardware time us)
+    uint64_t t4_host_rx_us;     ///< Host Rx timestamp (Host UTC epoch us)
+};
+
+static_assert(sizeof(PayloadTimeSync) == 32, "PayloadTimeSync must be exactly 32 bytes");
+
+/**
+ * @brief Payload for 1 Hz master UTC broadcast beacon (16 bytes).
+ */
+struct PayloadTimeBeacon {
+    uint64_t master_utc_us;     ///< Master broadcast UTC epoch timestamp (microseconds)
+    uint32_t beacon_seq;        ///< Monotonically increasing beacon sequence number
+    uint8_t  epoch_id;          ///< Epoch / sync domain identifier
+    uint8_t  stratum;           ///< Master clock stratum level (1 = Primary GPS/NTP master)
+    uint16_t flags;             ///< Synchronization and status flags
+};
+
+static_assert(sizeof(PayloadTimeBeacon) == 16, "PayloadTimeBeacon must be exactly 16 bytes");
 
 /**
  * @brief Payload for executing text CLI commands over TCP.
