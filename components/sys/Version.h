@@ -109,7 +109,7 @@ inline FeatureFlag parse_feature_name(const char* name) {
 
 constexpr uint32_t EPFW_MAGIC = 0x45504657; // "EPFW" (EmbeddedPixel FirmWare)
 constexpr uint16_t EPFW_HEADER_VERSION = 1;
-constexpr uint32_t APP_HEADER_FLASH_OFFSET = 0x200; // 512 bytes offset
+constexpr uint32_t APP_HEADER_FLASH_OFFSET = 0x400; // 1024 bytes offset (after 0x2B0 Cortex-M7 vector table)
 
 struct AppImageHeader {
     uint32_t magic;                  ///< 0x45504657 ("EPFW")
@@ -122,7 +122,7 @@ struct AppImageHeader {
     uint32_t image_crc32;            ///< IEEE 802.3 CRC32 over entire binary
     uint32_t build_timestamp;        ///< Unix epoch build timestamp
     uint32_t git_commit;             ///< 32-bit truncated git commit hash
-    uint8_t  reserved[20];           ///< Future crypto/signature padding
+    uint8_t  reserved[24];           ///< Future crypto/signature padding (24 bytes)
     uint32_t header_crc32;           ///< CRC32 of first 60 bytes of this struct
 
     bool isValid() const {
