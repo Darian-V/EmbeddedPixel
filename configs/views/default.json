@@ -1,0 +1,39 @@
+{
+  "name": "default",
+  "description": "Standard diagnostic view with 10 Hz counter and 1 Hz core temperature",
+  "version": 1,
+  "node_id": 1,
+  "streams": [
+    {
+      "tag": "CNTR",
+      "rate_hz": 10,
+      "enabled": true,
+      "display": {
+        "title": "System Diagnostic Counter",
+        "units": "counts",
+        "color": "cyan",
+        "buffer_size": 100
+      }
+    },
+    {
+      "tag": "TEMP",
+      "rate_hz": 1,
+      "enabled": true,
+      "display": {
+        "title": "Core Junction Temperature",
+        "units": "°C",
+        "color": "yellow",
+        "y_min": 0.0,
+        "y_max": 100.0,
+        "buffer_size": 50
+      }
+    }
+  ],
+  "layout": {
+    "mode": "split",
+    "refresh_rate_ms": 100
+  },
+  "export": {
+    "save_csv": false
+  }
+}

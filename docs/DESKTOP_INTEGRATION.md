@@ -319,3 +319,102 @@ powershell -ExecutionPolicy Bypass -File .\scripts\audit_tools.ps1
 | **Python 3** | `3.10 – 3.12` | OTA updater, stream receiver & test suite | `winget install -e --id Python.Python.3.12` |
 | **Wireshark** | `4.x` | UDP 50000/50001/50002 protocol inspection | `winget install -e --id WiresharkFoundation.Wireshark` |
 | **PuTTY / Terminal**| Latest | Serial VT100 CLI access (`115200 8N1`) | `winget install -e --id PuTTY.PuTTY` |
+
+---
+
+## 7. Saved Telemetry Views & Dashboard Presets
+
+Desktop tools and operators can save, load, and share multi-channel telemetry view presets defined in JSON (stored in `configs/views/` or `~/.embeddedpixel/views/`).
+
+### 7.1 View Specification Schema (`configs/views/<name>.json`)
+
+```json
+{
+  "name": "thermal_stress",
+  "description": "High-resolution thermal monitoring with 10 Hz core temperature",
+  "version": 1,
+  "node_id": 1,
+  "streams": [
+    {
+      "tag": "TEMP",
+      "rate_hz": 10,
+      "enabled": true,
+      "display": {
+        "title": "On-Chip Digital Temp Sensor (DTS)",
+        "units": "°C",
+        "color": "red",
+        "y_min": 20.0,
+        "y_max": 85.0,
+        "warn_threshold": 70.0,
+        "buffer_size": 200
+      }
+    },
+    {
+      "tag": "CNTR",
+      "rate_hz": 1,
+      "enabled": true,
+      "display": {
+        "title": "Heartbeat Counter",
+        "units": "counts",
+        "color": "gray"
+      }
+    }
+  ],
+  "layout": {
+    "mode": "dashboard",
+    "refresh_rate_ms": 100
+  },
+  "export": {
+    "save_csv": true,
+    "csv_prefix": "thermal_log"
+  }
+}
+```
+
+### 7.2 Built-in View Presets
+
+| Preset Name | Target Use Case | Active Streams & Rates |
+|---|---|---|
+| **`default`** | General system health & smoke testing | `CNTR` (10 Hz), `TEMP` (1 Hz) |
+| **`thermal_stress`** | Thermal dissipation & DTS sensor profiling | `TEMP` (10 Hz), `CNTR` (1 Hz, logging enabled) |
+| **`high_speed_counter`** | 1 kHz bus throughput, jitter & packet loss testing | `CNTR` (1000 Hz) |
+| **`full_diagnostic`** | Multi-channel stress testing across all sensors | `CNTR` (50 Hz), `TEMP` (5 Hz), `ADC0` (100 Hz) |
+
+### 7.3 CLI & Python Workflow (`scripts/telemetry_views.py`)
+
+```bash
+# 1. List all available saved views
+python scripts/telemetry_views.py list
+
+# 2. Inspect a saved view's channel configurations
+python scripts/telemetry_views.py show thermal_stress
+
+# 3. Apply a saved view to a live node over TCP
+python scripts/telemetry_views.py apply thermal_stress --ip 192.168.1.111
+
+# 4. Stream and render live dashboard in the terminal
+python scripts/telemetry_views.py stream thermal_stress --ip 192.168.1.111
+
+# 5. Create a new custom view preset
+python scripts/telemetry_views.py save motor_bench --streams CNTR:100 TEMP:20 --desc "Motor test bench stream"
+
+# 6. Capture live node stream setup into a named view
+python scripts/telemetry_views.py capture my_snapshot --ip 192.168.1.111
+```
+
+### 7.4 Node.js / Electron View Loader
+```javascript
+const fs = require('fs');
+const path = require('path');
+
+function loadViewPreset(viewName) {
+  const filePath = path.join(__dirname, '..', 'configs', 'views', `${viewName}.json`);
+  const rawData = fs.readFileSync(filePath, 'utf-8');
+  return JSON.parse(rawData);
+}
+
+// Example usage:
+// const view = loadViewPreset('thermal_stress');
+// console.log(`Configured ${view.streams.length} channels for layout: ${view.layout.mode}`);
+```
+

@@ -1,0 +1,26 @@
+{
+  "name": "high_speed_counter",
+  "description": "High-throughput 1000 Hz diagnostic counter stream for jitter and packet loss analysis",
+  "version": 1,
+  "node_id": 1,
+  "streams": [
+    {
+      "tag": "CNTR",
+      "rate_hz": 1000,
+      "enabled": true,
+      "display": {
+        "title": "1 kHz Hardware Accumulator Stream",
+        "units": "counts",
+        "color": "green",
+        "buffer_size": 1000
+      }
+    }
+  ],
+  "layout": {
+    "mode": "single",
+    "refresh_rate_ms": 50
+  },
+  "export": {
+    "save_csv": false
+  }
+}

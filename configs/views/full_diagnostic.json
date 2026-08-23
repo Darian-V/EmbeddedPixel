@@ -1,0 +1,53 @@
+{
+  "name": "full_diagnostic",
+  "description": "Comprehensive multi-channel diagnostic view with counter, temperature, and ADC streams",
+  "version": 1,
+  "node_id": 1,
+  "streams": [
+    {
+      "tag": "CNTR",
+      "rate_hz": 50,
+      "enabled": true,
+      "display": {
+        "title": "System Counter",
+        "units": "counts",
+        "color": "cyan",
+        "buffer_size": 200
+      }
+    },
+    {
+      "tag": "TEMP",
+      "rate_hz": 5,
+      "enabled": true,
+      "display": {
+        "title": "Junction Temp",
+        "units": "°C",
+        "color": "yellow",
+        "y_min": 10.0,
+        "y_max": 90.0,
+        "buffer_size": 100
+      }
+    },
+    {
+      "tag": "ADC0",
+      "rate_hz": 100,
+      "enabled": true,
+      "display": {
+        "title": "Analog Voltage Channel 0",
+        "units": "mV",
+        "color": "magenta",
+        "y_min": 0.0,
+        "y_max": 3300.0,
+        "buffer_size": 500
+      }
+    }
+  ],
+  "layout": {
+    "mode": "grid",
+    "columns": 3,
+    "refresh_rate_ms": 100
+  },
+  "export": {
+    "save_csv": false
+  }
+}

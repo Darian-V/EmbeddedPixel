@@ -1,0 +1,41 @@
+{
+  "name": "thermal_stress",
+  "description": "High-resolution thermal monitoring with 10 Hz core temperature and status alerts",
+  "version": 1,
+  "node_id": 1,
+  "streams": [
+    {
+      "tag": "TEMP",
+      "rate_hz": 10,
+      "enabled": true,
+      "display": {
+        "title": "On-Chip Digital Temp Sensor (DTS)",
+        "units": "°C",
+        "color": "red",
+        "y_min": 20.0,
+        "y_max": 85.0,
+        "warn_threshold": 70.0,
+        "buffer_size": 200
+      }
+    },
+    {
+      "tag": "CNTR",
+      "rate_hz": 1,
+      "enabled": true,
+      "display": {
+        "title": "Heartbeat Counter",
+        "units": "counts",
+        "color": "gray",
+        "buffer_size": 50
+      }
+    }
+  ],
+  "layout": {
+    "mode": "dashboard",
+    "refresh_rate_ms": 100
+  },
+  "export": {
+    "save_csv": true,
+    "csv_prefix": "thermal_log"
+  }
+}
