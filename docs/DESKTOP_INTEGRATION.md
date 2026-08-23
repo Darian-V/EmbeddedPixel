@@ -1,41 +1,44 @@
 # Desktop Software & UI Integration Guide
 
-**Document Version:** 2.0.0  
+**Document Version:** 2.1.0  
 **Target Audience:** Desktop Software Engineers, UI/Electron Developers, Test Automation Engineers  
-**Related Specification:** [PROTOCOL_SPEC.md](PROTOCOL_SPEC.md)
+**Related Specifications:** [PROTOCOL_SPEC.md](PROTOCOL_SPEC.md) | [HARDWARE_BRINGUP_NOTES.md](HARDWARE_BRINGUP_NOTES.md)
 
 ---
 
-## 1. System Architecture & Channels
+## 1. System Architecture & Communication Channels
 
-Desktop applications communicate with EmbeddedPixel nodes over three high-level interfaces:
+Desktop applications interface with EmbeddedPixel nodes over three high-speed, hardware-abstracted channels:
 
 ```mermaid
 graph LR
-    subgraph Desktop Application / GUI
-        UI_Dev["Device Manager<br/>(Discovery & Status)"]
+    subgraph Desktop Application / GUI Host
+        UI_Dev["Device Manager<br/>(Discovery, Heartbeat & Status)"]
+        UI_Time["Time Sync Master<br/>(2-Way RTT & 1 Hz UTC Beacon)"]
         UI_Telem["Telemetry & Charting<br/>(UDP Stream Receiver)"]
         UI_CLI["Terminal Console<br/>(Serial COM or TCP CLI)"]
         UI_OTA["OTA Firmware Updater<br/>(RAM-Staged Flashing)"]
     end
 
-    subgraph Network & Hardware Ports
+    subgraph Network & Hardware Interfaces
         UART["Serial COM Port<br/>(USART3 @ 115200 8N1)"]
-        UDP_Disc["UDP Port 50000<br/>(Heartbeat / Ping-Pong)"]
-        UDP_Telem["UDP Port 50001<br/>(Batched FourCC Stream)"]
-        TCP_Ctrl["TCP Port 50002<br/>(Control, CLI & OTA)"]
+        UDP_Disc["UDP Port 50000<br/>(Discovery, Heartbeat & TimeSync)"]
+        UDP_Telem["UDP Port 50001<br/>(Batched FourCC UTC Stream)"]
+        TCP_Ctrl["TCP Port 50002<br/>(Control, CLI & OTA Updates)"]
     end
 
     subgraph STM32 Node Subsystems
         SysCtrl["SystemController<br/>(Features, Versions & State)"]
+        TimeMgr["TimeManager<br/>(Disciplined Clock & PI Slew)"]
         CLI["CliEngine<br/>(Unified Command Processor)"]
         Telem["TelemetryService<br/>(Zero-Copy UDP DMA)"]
         OTA["OtaService & Bootloader<br/>(RAM-Staged Octal-Flash Update)"]
     end
 
-    UI_CLI -.->|Interactive Terminal| UART
+    UI_CLI -.->|Interactive VT100 Terminal| UART
     UI_CLI -.->|CMD_CLI_EXEC (0x0150)| TCP_Ctrl
     UI_Dev -.->|Heartbeat (1 Hz) & Pong| UDP_Disc
+    UI_Time -.->|TIME_SYNC_REQ (0x0010) & BEACON (0x0012)| UDP_Disc
     UI_Telem -.->|STREAM_SENSOR_BATCH (0x0200)| UDP_Telem
     UI_OTA -.->|CMD_OTA_* Transfer| TCP_Ctrl
 
@@ -43,15 +46,18 @@ graph LR
     TCP_Ctrl --> CLI
     TCP_Ctrl --> OTA
     UDP_Disc --> SysCtrl
+    UDP_Disc --> TimeMgr
+    TimeMgr --> Telem
     Telem --> UDP_Telem
     CLI --> SysCtrl
+    CLI --> TimeMgr
 ```
 
 ---
 
 ## 2. Interactive CLI Execution (Serial & TCP)
 
-EmbeddedPixel nodes share a **unified command engine** accessible both locally via USB-UART and remotely over TCP:
+EmbeddedPixel nodes provide a **unified command engine** accessible both locally via USB-UART and remotely over TCP socket:
 
 | Channel | Connection Details | Behavior |
 |---|---|---|
@@ -65,15 +71,37 @@ EmbeddedPixel nodes share a **unified command engine** accessible both locally v
 | `help` / `?` | *None* | Prints list of available commands and syntax | `help` |
 | `version` / `info` | *None* | Displays App Version, Bootloader Version, Board ID, Git SHA, and Build Time | `version` |
 | `status` | *None* | Displays IP, MAC, Uptime, Core Temperature, Active Streams, and OTA State | `status` |
+| `time` / `timesync` | *None* | Displays clock sync state, UTC epoch, phase offset, RTT, drift, and stats | `time` |
+| `time step` | `<offset_us>` | Diagnostic override: applies immediate phase offset step (microseconds) | `time step 5000` |
 | `feature list` | *None* | Lists all hardware & software features with `[ENABLED]` / `[DISABLED]` status | `feature list` |
-| `feature enable` | `<name>` | Enables a feature at runtime (`ota`, `telemetry`, `dts`, `cli`, `dynrate`) | `feature enable ota` |
+| `feature enable` | `<name>` | Enables a feature at runtime (`ota`, `telemetry`, `dts`, `cli`, `dynrate`, `timesync`) | `feature enable ota` |
 | `feature disable`| `<name>` | Disables a feature at runtime (e.g. locks node against OTA updates) | `feature disable ota` |
 | `stream start` | `[tag] [rate_hz]` | Starts telemetry streaming (all channels or specific FourCC tag) | `stream start CNTR 50` |
 | `stream stop` | `[tag]` | Stops telemetry streaming | `stream stop` |
-| `ota status` | *None* | Displays RAM staging buffer state and progress | `ota status` |
+| `ota status` | *None* | Displays RAM staging buffer state and transfer progress | `ota status` |
 | `ota abort` | *None* | Cancels any active OTA transfer and frees staging buffers | `ota abort` |
 | `led` | `<period_ms>` | Configures status LED blink period in milliseconds (10–10000 ms) | `led 200` |
 | `reboot` / `reset` | *None* | Performs a software reset into the bootloader | `reboot` |
+
+#### Example CLI Status & Time Outputs
+```text
+EmbeddedPixel> status
+[STATUS] Node ID: 1 | Board: Nucleo-H7S3L8
+[STATUS] App Version: v1.0.0 | Bootloader: v1.0.0
+[STATUS] IP: 192.168.1.111 | MAC: 00:80:E1:01:00:01
+[STATUS] Uptime: 42.5s | Core Temp: 38.2 C
+[STATUS] Telemetry: STREAMING | Active Channels: [CNTR]
+[STATUS] Features: ethernet, telemetry, dts, ota, dynrate, cli, timesync
+
+EmbeddedPixel> time
+[TIME] Sync State:   LOCKED
+[TIME] Current UTC:  1724432042123456 us (2026-08-23 18:40:42.123 UTC)
+[TIME] Local Uptime: 42.500 s
+[TIME] Phase Offset: -12 us
+[TIME] Network RTT:  380 us
+[TIME] Drift Adjust: -14 ppm
+[TIME] Exchanges:    10 RTT, 42 Beacons, 1 Steps
+```
 
 ---
 
@@ -127,10 +155,11 @@ def listen_discovery():
             print(f"[Node {addr[0]}] FW: 0x{fw_ver:08X} | Uptime: {uptime/1000.0:.1f}s | Temp: {temp_c:.1f}C | State: {state}")
 ```
 
-### 3.3 UDP High-Speed Telemetry Subscriber (Port 50001)
+### 3.3 High-Speed UDP Telemetry Subscriber with UTC Microsecond Timestamping (Port 50001)
 ```python
 import socket
 import struct
+import datetime
 
 def listen_telemetry():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -146,9 +175,34 @@ def listen_telemetry():
             ts_us, tag_raw, rate_hz, count, channels, stype = struct.unpack('<Q 4s HHH', data[16:36])
             tag = tag_raw.decode('ascii', errors='ignore')
 
+            utc_dt = datetime.datetime.fromtimestamp(ts_us / 1e6, tz=datetime.timezone.utc)
             if tag == 'CNTR' and len(data) >= 40:
                 counter_val, = struct.unpack('<I', data[36:40])
-                print(f"[{tag}] Seq: {seq_num} | Counter: {counter_val} | Rate: {rate_hz} Hz | Time: {ts_us/1e6:.3f}s")
+                print(f"[{tag}] Seq: {seq_num} | Val: {counter_val} | UTC: {utc_dt.strftime('%H:%M:%S.%f')} | Rate: {rate_hz} Hz")
+```
+
+### 3.4 Host Time Synchronization Master & Beacon Broadcaster (Port 50000)
+```python
+import socket
+import struct
+import time
+
+def run_time_sync_master(node_ip: str = "255.255.255.255"):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    
+    seq = 1
+    print(f"[TimeSync] Broadcasting 1 Hz UTC beacons to {node_ip}:50000...")
+    while True:
+        utc_now_us = int(time.time() * 1_000_000)
+        # PayloadTimeBeacon (16B): uint64 master_utc, uint32 seq, uint8 epoch_id, uint8 stratum, uint16 flags
+        payload = struct.pack('<QIBBH', utc_now_us, seq, 1, 1, 0)
+        # PE_Header (16B): magic=0x5045, ver=1, flags=0, node_id=0, msg_type=0x0012 (TIME_SYNC_BEACON)
+        hdr = struct.pack('<HBBHH I H H', 0x5045, 1, 0, 0, 0x0012, seq, len(payload), 0)
+        
+        sock.sendto(hdr + payload, (node_ip, 50000))
+        seq += 1
+        time.sleep(1.0)
 ```
 
 ---
@@ -220,7 +274,7 @@ function startTelemetryListener(onSample) {
 
 ## 5. OTA Firmware Update & Safety Verification
 
-Firmware updates are staged in MCU internal AXI SRAM (up to 160 KB) and flashed into Macronix Octal-SPI External Flash (`0x70000000`) by the 2-stage bootloader upon soft reset.
+Firmware updates are staged into MCU internal AXI SRAM (up to 160 KB) and flashed into Macronix Octal-SPI External Flash (`0x70000000`) by the 2-stage bootloader upon soft reset.
 
 ### Pre-Flight Safety Gates (Desktop GUIs)
 Before initiating an OTA transfer, host software must execute three mandatory safety gates:
@@ -243,3 +297,25 @@ python scripts/ota_updater.py --ip 192.168.1.111 --cli "status"
 # Flash firmware image with automatic header parsing and CRC verification
 python scripts/ota_updater.py --ip 192.168.1.111 --bin boards/nucleo_h7s3l8/apps/ethernetdev/programming_files/ethernetdev_nucleo_h7s3l8.bin
 ```
+
+---
+
+## 6. Desktop Development & Toolchain Verification
+
+For new developer machine setups, all dependency desktop applications and compilers can be audited using the repository health check script:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\audit_tools.ps1
+```
+
+### Essential Toolchain Matrix
+
+| Tool | Recommended Version | Purpose | Installation |
+|---|---|---|---|
+| **ARM GCC** | `13.3.1 Rel1` | C++17 Cortex-M7 cross-compiler | `powershell -ExecutionPolicy Bypass -File .\scripts\setup_toolchain.ps1` |
+| **CMake** | `3.20+` | Meta-build configuration system | `winget install -e --id Kitware.CMake` |
+| **Ninja** | `1.12+` | High-speed parallel build engine | `winget install -e --id Ninja-build.Ninja` |
+| **STM32CubeProg** | Latest | Hardware flasher & external `.stldr` loaders | Download from STMicroelectronics |
+| **Python 3** | `3.10 – 3.12` | OTA updater, stream receiver & test suite | `winget install -e --id Python.Python.3.12` |
+| **Wireshark** | `4.x` | UDP 50000/50001/50002 protocol inspection | `winget install -e --id WiresharkFoundation.Wireshark` |
+| **PuTTY / Terminal**| Latest | Serial VT100 CLI access (`115200 8N1`) | `winget install -e --id PuTTY.PuTTY` |

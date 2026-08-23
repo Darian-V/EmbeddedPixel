@@ -66,6 +66,8 @@ enum class MessageType : uint16_t {
     DISCOVERY_PONG          = 0x0003,   ///< Node unicast probe response
     TIME_SYNC_REQ           = 0x0010,   ///< Clock synchronization request
     TIME_SYNC_RESP          = 0x0011,   ///< Clock synchronization response
+    TIME_SYNC_BEACON        = 0x0012,   ///< 1 Hz master UTC broadcast beacon
+
 
     // ── Control & RPC (Port 50002 TCP) ─────────────────────────────
     CMD_GET_NODE_INFO       = 0x0100,   ///< Query hardware UID, versions, features
@@ -158,6 +160,28 @@ struct PayloadDiscoveryPong {
     uint32_t feature_flags;      // Active FeatureFlag bitmask
 };
 ```
+
+#### 3. `PayloadTimeSync` (32 Bytes, 2-Way RTT Clock Calibration)
+```cpp
+struct PayloadTimeSync {
+    uint64_t t1_host_tx_us;      // Host Tx timestamp (Host UTC epoch us)
+    uint64_t t2_node_rx_us;      // Node Rx timestamp (Local hardware time us)
+    uint64_t t3_node_tx_us;      // Node Tx timestamp (Local hardware time us)
+    uint64_t t4_host_rx_us;      // Host Rx timestamp (Host UTC epoch us)
+};
+```
+
+#### 4. `PayloadTimeBeacon` (16 Bytes, 1 Hz Master UTC Broadcast)
+```cpp
+struct PayloadTimeBeacon {
+    uint64_t master_utc_us;      // Master broadcast UTC epoch timestamp (microseconds)
+    uint32_t beacon_seq;         // Monotonically increasing beacon sequence number
+    uint8_t  epoch_id;           // Epoch / sync domain identifier
+    uint8_t  stratum;            // Master clock stratum level (1 = Primary GPS/NTP master)
+    uint16_t flags;              // Synchronization status and holdover flags
+};
+```
+
 
 ---
 
@@ -321,6 +345,8 @@ Format: `(Major << 24) | (Minor << 16) | (Patch << 8) | Build`
 | `Bit 6` | `0x00000040` | `FEAT_SECURE_BOOT` | Cryptographic ECDSA signature verification |
 | `Bit 7` | `0x00000080` | `FEAT_DYNAMIC_RATE` | Dynamic sensor frequency reconfiguration |
 | `Bit 8` | `0x00000100` | `FEAT_UART_CLI` | Interactive serial terminal on USART3 |
+| `Bit 9` | `0x00000200` | `FEAT_TIME_SYNC` | Disciplined local clock & UTC epoch time sync |
+
 
 ---
 

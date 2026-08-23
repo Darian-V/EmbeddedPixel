@@ -19,9 +19,10 @@ The architecture strictly decouples application business logic from underlying h
 ## Core Technologies
 
 * **Language:** C++17 (zero-cost abstractions, RAII, type safety)
-* **Build System:** CMake (Multi-target matrix generator, MinGW Makefiles)
+* **Build System:** CMake + Ninja (or MinGW Makefiles)
 * **Execution Model:** FreeRTOS (Abstracted via `core/osal/Thread.h`, `Mutex.h`, `Queue.h`)
 * **Networking Stack:** lwIP with zero-copy DMA streaming (`NetManager`, `TelemetryService`, `OtaService`, `DiscoveryService`)
+* **Time Synchronization:** Microsecond disciplined clock engine (`sys::TimeManager`, `hal::ITimeSource`, PI Slew disciplining)
 * **Supported MCU Families:** STM32H7RS (Cortex-M7 @ 600MHz), STM32H743 (Cortex-M7 @ 480MHz), extensible to any Cortex-M
 * **Reference Boards:** ST Nucleo-H7S3L8, PixelJam, Custom PCBAs
 
@@ -32,8 +33,8 @@ The architecture strictly decouples application business logic from underlying h
 ```
 apps/        -> Board-agnostic application logic & entry points (main.cpp)
 boards/      -> Board Support Packages (BSPs: pin muxing, oscillators, power, memory controllers, Board_GetLed())
-components/  -> Reusable business logic (SysController, CliEngine, NetManager, BlinkTask, TelemetryService)
-core/        -> HAL pure virtual interfaces (IGpio, IUart, IEth, ITempSensor) & FreeRTOS OSAL wrappers
+components/  -> Reusable business logic (SysController, CliEngine, NetManager, BlinkTask, TelemetryService, TimeManager)
+core/        -> HAL pure virtual interfaces (IGpio, IUart, IEth, ITempSensor, ITimeSource) & FreeRTOS OSAL wrappers
 targets/     -> Concrete MCU drivers, startup vectors, fault handlers, lwIP port files
 vendor/      -> Vendor SDKs (CMSIS, STM32Cube, FreeRTOS, lwIP, ExtMem Manager)
 ```
@@ -73,11 +74,19 @@ graph TD
 
 ### Prerequisites
 
-| Tool | Version | Notes |
+| Tool | Recommended Version | Purpose / Installation |
 |---|---|---|
-| `arm-none-eabi-gcc` | 13.3+ | ARM GNU Toolchain on `PATH` |
-| `cmake` | 3.20+ | CMake build generator |
-| `mingw32-make` | Any | From MSYS2 (`ucrt64` environment) |
+| `arm-none-eabi-gcc` | 13.3+ | ARM GNU Toolchain (`powershell -File .\scripts\setup_toolchain.ps1`) |
+| `cmake` | 3.20+ | CMake build generator (`winget install Kitware.CMake`) |
+| `ninja` | 1.12+ | High-speed parallel build engine (`winget install Ninja-build.Ninja`) |
+| `python` | 3.10+ | OTA updater & test automation (`winget install Python.Python.3.12`) |
+| `STM32CubeProg` | Latest | STM32 flasher & external loaders (STMicroelectronics) |
+
+> [!TIP]
+> Run the environment audit script to verify all prerequisites and connected probes:
+> ```powershell
+> powershell -ExecutionPolicy Bypass -File .\scripts\audit_tools.ps1
+> ```
 
 ```bash
 # Clone with shallow submodules
@@ -86,16 +95,17 @@ git clone --recurse-submodules --shallow-submodules https://github.com/Darian-V/
 
 ### Parameterized Build System
 
-Build any application for any board using the standard CMake configuration matrix:
+Build any application for any board using Ninja and the CMake configuration matrix:
 
 ```bash
-cmake -G "MinGW Makefiles" -S . -B build \
+cmake -G "Ninja" -S . -B build \
       -DAPP=<application_name> \
       -DBOARD=<board_target> \
       -DTARGET=<mcu_family>
 
 cmake --build build
 ```
+
 
 #### Application & Board Matrix
 
