@@ -74,8 +74,8 @@ SECTIONS
     . = ALIGN(4);
   } >FLASH
 
-  /* Application Image Header at fixed offset 0x200 (512 bytes from flash origin) */
-  .app_header 0x70000200 :
+  /* Application Image Header at offset 0x400 (1024 bytes from flash origin) */
+  .app_header 0x70000400 :
   {
     . = ALIGN(4);
     KEEP(*(.app_header))

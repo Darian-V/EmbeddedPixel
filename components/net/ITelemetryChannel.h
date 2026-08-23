@@ -86,7 +86,7 @@ public:
         : sample_rate_hz_(sampleRateHz),
           batch_count_(batchCount),
           counter_(0),
-          enabled_(true) {}
+          enabled_(false) {}
 
     uint32_t get_tag() const override {
         return proto::STREAM_TAG_COUNTER;
@@ -166,7 +166,7 @@ public:
         : sensor_(sensor),
           sample_rate_hz_(sampleRateHz),
           batch_count_(batchCount),
-          enabled_(true) {
+          enabled_(false) {
         sensor_.init();
     }
 

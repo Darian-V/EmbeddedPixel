@@ -14,7 +14,7 @@ TelemetryService::TelemetryService(NetManager& netManager, uint16_t nodeId)
     : net_(netManager),
       node_id_(nodeId),
       channel_count_(0),
-      is_streaming_(true),
+      is_streaming_(false),
       dest_port_(proto::PORT_STREAM),
       seq_num_(0),
       packets_sent_(0),
@@ -118,6 +118,14 @@ void TelemetryService::stop_streaming(uint32_t streamTag) {
             ch->set_enabled(false);
             LOG_INFO("TelemetryService: stream '%s' stopped\r\n", ch->get_name());
         }
+        bool any_enabled = false;
+        for (size_t i = 0; i < channel_count_; ++i) {
+            if (channels_[i].channel != nullptr && channels_[i].channel->is_enabled()) {
+                any_enabled = true;
+                break;
+            }
+        }
+        is_streaming_ = any_enabled;
     } else {
         for (size_t i = 0; i < channel_count_; ++i) {
             if (channels_[i].channel != nullptr) {

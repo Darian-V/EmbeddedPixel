@@ -5,6 +5,7 @@
 #include "TelemetryService.h"
 #include "OtaService.h"
 #include "DiscoveryService.h"
+#include "proto/ProtocolTypes.h"
 
 // FreeRTOS & HAL
 #include "FreeRTOS.h"
@@ -12,6 +13,7 @@
 #include "stm32h7rsxx_hal.h"
 
 namespace sys {
+using namespace net::proto;
 
 SystemController::SystemController(uint16_t nodeId,
                                    const AppImageHeader& appHeader,
@@ -69,7 +71,10 @@ uint32_t SystemController::get_uptime_ms() const {
 
 float SystemController::get_core_temp_c() const {
     if (temp_sensor_ != nullptr) {
-        return temp_sensor_->read_celsius();
+        int32_t t_c = 0;
+        if (temp_sensor_->get_temperature(t_c)) {
+            return static_cast<float>(t_c);
+        }
     }
     return 0.0f;
 }
@@ -107,9 +112,9 @@ bool SystemController::start_telemetry(uint32_t tag, uint16_t rate, uint16_t bat
     }
     ip_addr_t bcast;
     ip_addr_set_ip4_u32(&bcast, IPADDR_BROADCAST);
-    telemetry_->start_streaming(bcast, proto::PORT_STREAM, tag, rate, batch);
+    telemetry_->start_streaming(bcast, net::proto::PORT_STREAM, tag, rate, batch);
     if (discovery_ != nullptr) {
-        discovery_->set_state(proto::NodeState::STREAMING);
+        discovery_->set_state(net::proto::NodeState::STREAMING);
     }
     return true;
 }
@@ -118,7 +123,7 @@ bool SystemController::stop_telemetry(uint32_t tag) {
     if (telemetry_ == nullptr) return false;
     telemetry_->stop_streaming(tag);
     if (!telemetry_->is_streaming() && discovery_ != nullptr) {
-        discovery_->set_state(proto::NodeState::IDLE);
+        discovery_->set_state(net::proto::NodeState::IDLE);
     }
     return true;
 }
