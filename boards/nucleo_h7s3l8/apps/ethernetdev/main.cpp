@@ -97,6 +97,9 @@ int main(void) {
     static net::CounterChannel counterChannel(10); // 10Hz Monotonic Counter ('CNTR')
     static hal::ITempSensor& tempSensor = Board_GetTempSensor();
     static net::TemperatureChannel tempChannel(tempSensor, 1); // 1Hz DTS Temperature ('TEMP')
+    static net::StressTestChannel<16> str1Channel(net::proto::STREAM_TAG_STR1, 1000, 45); // 16ch @ 1000 Hz, batch 45 ('STR1')
+    static net::StressTestChannel<64> str6Channel(net::proto::STREAM_TAG_STR6, 5000, 11); // 64ch @ 5000 Hz, batch 11 ('STR6')
+    static net::StressTestChannel<64> raw0Channel(net::proto::STREAM_TAG_RAW0, 50000, 11); // 64ch @ 50000 Hz, batch 11 ('RAW0')
 
     // ── Flash Driver & OTA Service ─────────────────────────────────────────
     static stm32::h7::Stm32ExtMemFlash flashDriver;
@@ -109,6 +112,9 @@ int main(void) {
 
     static net::services::TelemetryService telemetryService(netMan, NODE_ID, counterChannel);
     telemetryService.register_channel(tempChannel);
+    telemetryService.register_channel(str1Channel);
+    telemetryService.register_channel(str6Channel);
+    telemetryService.register_channel(raw0Channel);
     static stm32::FreeRtosThread telemetryThread(telemetryService, "TelemetrySvc", 2048, 4);
 
     static net::services::CommandService commandService(netMan, discoveryService, telemetryService, NODE_ID, &otaService);
