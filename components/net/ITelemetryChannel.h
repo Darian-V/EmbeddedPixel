@@ -239,5 +239,95 @@ private:
     bool              enabled_;
 };
 
+/**
+ * @brief High-Speed Multi-Channel Stress Test telemetry channel ('STR6', 'STR1', 'RAW0', etc.)
+ * Conforms to EMBEDDED_STRESS_TEST_GUIDE.md
+ */
+template <size_t NumChannels = 64>
+class StressTestChannel : public ITelemetryChannel {
+public:
+    explicit StressTestChannel(uint32_t streamTag = proto::STREAM_TAG_STR6,
+                               uint16_t sampleRateHz = 5000,
+                               uint16_t batchCount = 11)
+        : tag_(streamTag),
+          sample_rate_hz_(sampleRateHz),
+          batch_count_(batchCount),
+          counter_(0),
+          enabled_(false) {}
+
+    uint32_t get_tag() const override {
+        return tag_;
+    }
+
+    const char* get_name() const override {
+        return "StressStream";
+    }
+
+    uint16_t get_sample_rate_hz() const override {
+        return sample_rate_hz_;
+    }
+
+    void set_sample_rate_hz(uint16_t rate_hz) override {
+        if (rate_hz > 0) {
+            sample_rate_hz_ = rate_hz;
+        }
+    }
+
+    uint16_t get_batch_count() const override {
+        return batch_count_;
+    }
+
+    void set_batch_count(uint16_t batch) override {
+        if (batch > 0) {
+            batch_count_ = batch;
+        }
+    }
+
+    uint16_t get_channel_count() const override {
+        return static_cast<uint16_t>(NumChannels);
+    }
+
+    proto::SampleType get_sample_type() const override {
+        return proto::SampleType::UINT16;
+    }
+
+    size_t get_bytes_per_sample() const override {
+        return NumChannels * sizeof(uint16_t);
+    }
+
+    bool is_enabled() const override {
+        return enabled_;
+    }
+
+    void set_enabled(bool enabled) override {
+        enabled_ = enabled;
+    }
+
+    size_t produce_samples(void* buffer, size_t max_samples) override {
+        if (max_samples < 1 || buffer == nullptr) {
+            return 0;
+        }
+        auto* data = static_cast<uint16_t*>(buffer);
+        for (size_t s = 0; s < max_samples; ++s) {
+            counter_++;
+            for (size_t ch = 0; ch < NumChannels; ++ch) {
+                data[s * NumChannels + ch] = static_cast<uint16_t>(counter_ + (ch * 100));
+            }
+        }
+        return max_samples;
+    }
+
+    void reset() {
+        counter_ = 0;
+    }
+
+private:
+    uint32_t tag_;
+    uint16_t sample_rate_hz_;
+    uint16_t batch_count_;
+    uint16_t counter_;
+    bool     enabled_;
+};
+
 } // namespace net
 

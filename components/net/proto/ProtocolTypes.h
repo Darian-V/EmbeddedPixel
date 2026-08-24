@@ -324,6 +324,11 @@ constexpr uint32_t STREAM_TAG_TEMP    = MAKE_FOURCC('T', 'E', 'M', 'P'); ///< "T
 constexpr uint32_t STREAM_TAG_ADC     = MAKE_FOURCC('A', 'D', 'C', '0'); ///< "ADC0"
 constexpr uint32_t STREAM_TAG_IMU     = MAKE_FOURCC('I', 'M', 'U', '0'); ///< "IMU0"
 constexpr uint32_t STREAM_TAG_PIXELS  = MAKE_FOURCC('P', 'I', 'X', 'L'); ///< "PIXL"
+constexpr uint32_t STREAM_TAG_STR8    = MAKE_FOURCC('S', 'T', 'R', '8'); ///< "STR8" (8-ch stress)
+constexpr uint32_t STREAM_TAG_STR1    = MAKE_FOURCC('S', 'T', 'R', '1'); ///< "STR1" (16-ch stress)
+constexpr uint32_t STREAM_TAG_STR3    = MAKE_FOURCC('S', 'T', 'R', '3'); ///< "STR3" (32-ch stress)
+constexpr uint32_t STREAM_TAG_STR6    = MAKE_FOURCC('S', 'T', 'R', '6'); ///< "STR6" (64-ch stress)
+constexpr uint32_t STREAM_TAG_RAW0    = MAKE_FOURCC('R', 'A', 'W', '0'); ///< "RAW0" (64-ch RAW)
 
 /**
  * @brief Header preceding raw sample array in high-speed streaming packets.
