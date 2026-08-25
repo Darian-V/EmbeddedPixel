@@ -31,6 +31,7 @@ private:
     void cmd_help(char* out, size_t max_len);
     void cmd_version(char* out, size_t max_len);
     void cmd_status(char* out, size_t max_len);
+    void cmd_time(char* out, size_t max_len);
     void cmd_feature(const char* action, const char* name, char* out, size_t max_len);
     void cmd_stream(const char* action, const char* arg1, const char* arg2, char* out, size_t max_len);
     void cmd_ota(const char* action, char* out, size_t max_len);

@@ -8,6 +8,7 @@
 #include "lwip/tcpip.h"
 #include "lwip/dhcp.h"
 #include "lwip/ip_addr.h"
+#include "lwip/etharp.h"
 
 // FreeRTOS
 #include "FreeRTOS.h"
@@ -173,55 +174,62 @@ void NetManager::monitorLoop() {
         } else {
             LOG_INFO("NetManager: DHCP IP = %s\r\n",
                      ip4addr_ntoa(netif_ip4_addr(&netif_)));
+            etharp_gratuitous(&netif_);
         }
     }
 
     // ── Main monitor loop ──────────────────────────────────────────────────
     bool dhcp_printed = false;
     bool link_was_up  = true;
+    TickType_t last_link_check = xTaskGetTickCount();
 
     while (true) {
-        // ── Read RX DMA descriptors ─────────────────────────────────────────
+        // ── Read RX DMA descriptors immediately (1ms polling latency) ───────
         ethernetif_input(&netif_);
 
-        // ── DHCP mode: print IP once acquired ──────────────────────────────
-        if (cfg_.mode == IpMode::DHCP && !dhcp_printed) {
-            if (dhcp_supplied_address(&netif_)) {
-                LOG_INFO("NetManager: DHCP IP = %s\r\n",
-                         ip4addr_ntoa(netif_ip4_addr(&netif_)));
-                dhcp_printed = true;
-            }
-        }
+        TickType_t now = xTaskGetTickCount();
+        if ((now - last_link_check) >= pdMS_TO_TICKS(500)) {
+            last_link_check = now;
 
-        // ── Link loss detection and recovery ───────────────────────────────
-        bool link_now_up = eth_.IsLinkUp();
-
-        if (link_was_up && !link_now_up) {
-            // Link just dropped
-            LOG_INFO("NetManager: link DOWN\r\n");
-            tcpip_callback(cb_link_down, this);
-            dhcp_printed = false;
-            link_was_up  = false;
-        }
-
-        if (!link_was_up && link_now_up) {
-            // Link just recovered
-            LOG_INFO("NetManager: link restored\r\n");
-            tcpip_callback(cb_link_up, this);
-            if (cfg_.mode == IpMode::DHCP_WITH_FALLBACK) {
-                if (!waitForDhcpLease(cfg_.dhcp_timeout_ms)) {
-                    LOG_INFO("NetManager: DHCP timeout — applying static fallback\r\n");
-                    tcpip_callback(cb_fallback_static, this);
-                    vTaskDelay(pdMS_TO_TICKS(100));
-                } else {
+            // ── DHCP mode: print IP once acquired ──────────────────────────
+            if (cfg_.mode == IpMode::DHCP && !dhcp_printed) {
+                if (dhcp_supplied_address(&netif_)) {
                     LOG_INFO("NetManager: DHCP IP = %s\r\n",
                              ip4addr_ntoa(netif_ip4_addr(&netif_)));
+                    dhcp_printed = true;
                 }
             }
-            link_was_up = true;
+
+            // ── Link loss detection and recovery ───────────────────────────
+            bool link_now_up = eth_.IsLinkUp();
+
+            if (link_was_up && !link_now_up) {
+                // Link just dropped
+                LOG_INFO("NetManager: link DOWN\r\n");
+                tcpip_callback(cb_link_down, this);
+                dhcp_printed = false;
+                link_was_up  = false;
+            }
+
+            if (!link_was_up && link_now_up) {
+                // Link just recovered
+                LOG_INFO("NetManager: link restored\r\n");
+                tcpip_callback(cb_link_up, this);
+                if (cfg_.mode == IpMode::DHCP_WITH_FALLBACK) {
+                    if (!waitForDhcpLease(cfg_.dhcp_timeout_ms)) {
+                        LOG_INFO("NetManager: DHCP timeout — applying static fallback\r\n");
+                        tcpip_callback(cb_fallback_static, this);
+                        vTaskDelay(pdMS_TO_TICKS(100));
+                    } else {
+                        LOG_INFO("NetManager: DHCP IP = %s\r\n",
+                                 ip4addr_ntoa(netif_ip4_addr(&netif_)));
+                    }
+                }
+                link_was_up = true;
+            }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 

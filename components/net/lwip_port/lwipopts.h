@@ -10,17 +10,22 @@
 #define MEMP_NUM_NETCONN        16
 #define MEMP_NUM_NETBUF         16
 #define MEMP_NUM_UDPPCB         8
-#define MEMP_NUM_TCP_PCB        8
-#define MEMP_NUM_TCP_PCB_LISTEN 4
+#define MEMP_NUM_TCP_PCB        32
+#define MEMP_NUM_TCP_PCB_LISTEN 8
 #define MEMP_NUM_SYS_TIMEOUT    16
 #define PBUF_POOL_SIZE          24
 #define PBUF_POOL_BUFSIZE       1536
 #define TCP_MSS                 1460
-#define TCP_SND_BUF             (4 * TCP_MSS)
-#define TCP_WND                 (4 * TCP_MSS)
+#define TCP_SND_BUF             (2 * TCP_MSS)
+#define TCP_MSL                 1000UL      // 1-second TIME_WAIT to avoid PCB pool exhaustion
+#define SO_REUSE                1
+#define TCP_LISTEN_BACKLOG      1
+#define TCP_DEFAULT_LISTEN_BACKLOG 8
+#define TCP_ACK_DELAY           0       // Send ACK immediately on every received segment (eliminate 500ms delayed ACK)
+#define TCP_NODELAY             1       // Disable Nagle algorithm
 #define LWIP_DHCP               1       // Enable DHCP
 #define TCPIP_THREAD_STACKSIZE  4096    // Stack size for lwIP tcpip_thread
-#define TCPIP_THREAD_PRIO       5       // RTOS_PRIORITY_REALTIME
+#define TCPIP_THREAD_PRIO       6       // RTOS_PRIORITY_REALTIME (above all application threads)
 #define DEFAULT_THREAD_STACKSIZE 1024
 
 #define TCPIP_MBOX_SIZE         16

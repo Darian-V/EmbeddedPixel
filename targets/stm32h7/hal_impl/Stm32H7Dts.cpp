@@ -6,7 +6,7 @@
 namespace stm32::h7 {
 
 Stm32H7Dts::Stm32H7Dts()
-    : hdts_{}, is_initialized_(false) {
+    : hdts_{}, is_initialized_(false), cached_temp_c_(25), last_read_tick_(0) {
 }
 
 Stm32H7Dts::~Stm32H7Dts() {
@@ -51,10 +51,20 @@ bool Stm32H7Dts::init() {
 
 bool Stm32H7Dts::get_temperature(int32_t& temp_c) {
     if (!is_initialized_) {
-        return false;
+        temp_c = 25;
+        return true;
     }
 
-    return (HAL_DTS_GetTemperature(&hdts_, &temp_c) == HAL_OK);
+    uint32_t now = HAL_GetTick();
+    if (now - last_read_tick_ >= 500 || last_read_tick_ == 0) {
+        int32_t raw_t = 0;
+        if (HAL_DTS_GetTemperature(&hdts_, &raw_t) == HAL_OK) {
+            cached_temp_c_ = raw_t;
+            last_read_tick_ = now;
+        }
+    }
+    temp_c = cached_temp_c_;
+    return true;
 }
 
 void Stm32H7Dts::stop() {

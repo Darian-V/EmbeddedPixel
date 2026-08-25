@@ -1,6 +1,8 @@
 #include "CliEngine.h"
 #include "Version.h"
 #include "proto/ProtocolTypes.h"
+#include "FreeRTOS.h"
+#include "task.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -48,6 +50,8 @@ int CliEngine::execute(const char* input_line, char* output_buf, size_t max_len)
         cmd_version(output_buf, max_len);
     } else if (strcmp(cmd, "status") == 0) {
         cmd_status(output_buf, max_len);
+    } else if (strcmp(cmd, "time") == 0) {
+        cmd_time(output_buf, max_len);
     } else if (strcmp(cmd, "feature") == 0) {
         char* action = strtok_r(nullptr, " ", &saveptr);
         char* name   = strtok_r(nullptr, " ", &saveptr);
@@ -128,6 +132,9 @@ void CliEngine::cmd_status(char* out, size_t max_len) {
     uint32_t ip = sys_.get_ip_addr();
     uint32_t uptime_s = sys_.get_uptime_ms() / 1000;
     float temp = sys_.get_core_temp_c();
+    int temp_whole = static_cast<int>(temp);
+    int temp_frac = static_cast<int>((temp - temp_whole) * 10.0f);
+    if (temp_frac < 0) temp_frac = -temp_frac;
     bool ota_on = sys_.is_feature_enabled(FeatureFlag::FEAT_OTA_RAM_STAGING);
     bool stream_on = sys_.is_streaming();
 
@@ -135,7 +142,7 @@ void CliEngine::cmd_status(char* out, size_t max_len) {
         "=== System Health & Status ===\r\n"
         "  IP Address:    %u.%u.%u.%u\r\n"
         "  Uptime:        %lu seconds (%lu ms)\r\n"
-        "  Core Temp:     %.1f C\r\n"
+        "  Core Temp:     %d.%d C\r\n"
         "  LED Period:    %lu ms\r\n"
         "  Telemetry:     %s\r\n"
         "  OTA Updates:   %s\r\n",
@@ -143,12 +150,26 @@ void CliEngine::cmd_status(char* out, size_t max_len) {
         (unsigned)((ip >> 8) & 0xFF),
         (unsigned)((ip >> 16) & 0xFF),
         (unsigned)((ip >> 24) & 0xFF),
-        uptime_s,
-        sys_.get_uptime_ms(),
-        temp,
-        sys_.get_blink_rate(),
+        (unsigned long)uptime_s,
+        (unsigned long)sys_.get_uptime_ms(),
+        (int)temp_whole,
+        (int)temp_frac,
+        (unsigned long)sys_.get_blink_rate(),
         stream_on ? "STREAMING ACTIVE" : "IDLE",
         ota_on ? "ENABLED (Unlocked)" : "DISABLED (Locked)"
+    );
+}
+
+void CliEngine::cmd_time(char* out, size_t max_len) {
+    uint32_t uptime_ms = sys_.get_uptime_ms();
+    uint32_t uptime_s = uptime_ms / 1000;
+    snprintf(out, max_len,
+        "=== Node System Time ===\r\n"
+        "  Uptime:             %lu seconds (%lu ms)\r\n"
+        "  Tick Count:         %lu ticks\r\n",
+        uptime_s,
+        uptime_ms,
+        (unsigned long)xTaskGetTickCount()
     );
 }
 
@@ -157,18 +178,19 @@ void CliEngine::cmd_feature(const char* action, const char* name, char* out, siz
         uint32_t mask = sys_.get_feature_flags();
         snprintf(out, max_len,
             "=== Feature Flags Configuration (0x%08lX) ===\r\n"
-            "  %-12s [0x%04X] : %s\r\n"
-            "  %-12s [0x%04X] : %s\r\n"
-            "  %-12s [0x%04X] : %s\r\n"
-            "  %-12s [0x%04X] : %s\r\n"
-            "  %-12s [0x%04X] : %s\r\n"
-            "  %-12s [0x%04X] : %s\r\n",
-            "ota",       (unsigned)FeatureFlag::FEAT_OTA_RAM_STAGING,  is_feature_set(mask, FeatureFlag::FEAT_OTA_RAM_STAGING)  ? "ENABLED" : "DISABLED",
-            "telemetry", (unsigned)FeatureFlag::FEAT_TELEMETRY_STREAM, is_feature_set(mask, FeatureFlag::FEAT_TELEMETRY_STREAM) ? "ENABLED" : "DISABLED",
-            "dts",       (unsigned)FeatureFlag::FEAT_TEMP_SENSOR_DTS,  is_feature_set(mask, FeatureFlag::FEAT_TEMP_SENSOR_DTS)  ? "ENABLED" : "DISABLED",
-            "ethernet",  (unsigned)FeatureFlag::FEAT_ETHERNET_LAN8742, is_feature_set(mask, FeatureFlag::FEAT_ETHERNET_LAN8742) ? "ENABLED" : "DISABLED",
-            "dynrate",   (unsigned)FeatureFlag::FEAT_DYNAMIC_RATE,     is_feature_set(mask, FeatureFlag::FEAT_DYNAMIC_RATE)     ? "ENABLED" : "DISABLED",
-            "cli",       (unsigned)FeatureFlag::FEAT_UART_CLI,         is_feature_set(mask, FeatureFlag::FEAT_UART_CLI)         ? "ENABLED" : "DISABLED"
+            "  ota          [0x%04X] : %s\r\n"
+            "  telemetry    [0x%04X] : %s\r\n"
+            "  dts          [0x%04X] : %s\r\n"
+            "  ethernet     [0x%04X] : %s\r\n"
+            "  dynrate      [0x%04X] : %s\r\n"
+            "  cli          [0x%04X] : %s\r\n",
+            (unsigned long)mask,
+            (unsigned)FeatureFlag::FEAT_OTA_RAM_STAGING,  is_feature_set(mask, FeatureFlag::FEAT_OTA_RAM_STAGING)  ? "ENABLED" : "DISABLED",
+            (unsigned)FeatureFlag::FEAT_TELEMETRY_STREAM, is_feature_set(mask, FeatureFlag::FEAT_TELEMETRY_STREAM) ? "ENABLED" : "DISABLED",
+            (unsigned)FeatureFlag::FEAT_TEMP_SENSOR_DTS,  is_feature_set(mask, FeatureFlag::FEAT_TEMP_SENSOR_DTS)  ? "ENABLED" : "DISABLED",
+            (unsigned)FeatureFlag::FEAT_ETHERNET_LAN8742, is_feature_set(mask, FeatureFlag::FEAT_ETHERNET_LAN8742) ? "ENABLED" : "DISABLED",
+            (unsigned)FeatureFlag::FEAT_DYNAMIC_RATE,     is_feature_set(mask, FeatureFlag::FEAT_DYNAMIC_RATE)     ? "ENABLED" : "DISABLED",
+            (unsigned)FeatureFlag::FEAT_UART_CLI,         is_feature_set(mask, FeatureFlag::FEAT_UART_CLI)         ? "ENABLED" : "DISABLED"
         );
         return;
     }
