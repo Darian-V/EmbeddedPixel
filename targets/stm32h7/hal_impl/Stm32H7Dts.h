@@ -19,6 +19,8 @@ public:
 private:
     DTS_HandleTypeDef hdts_;
     bool is_initialized_;
+    int32_t cached_temp_c_;
+    uint32_t last_read_tick_;
 };
 
 } // namespace stm32::h7

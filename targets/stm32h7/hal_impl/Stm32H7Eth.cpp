@@ -77,12 +77,11 @@ extern "C" void HAL_ETH_RxLinkCallback(void** pStart, void** pEnd,
         *ppStart = p;
     } else {
         (*ppEnd)->next = p;
+        for (struct pbuf* q = *ppStart; q != p; q = q->next) {
+            q->tot_len += Length;
+        }
     }
     *ppEnd = p;
-
-    for (struct pbuf* q = *ppStart; q != nullptr; q = q->next) {
-        q->tot_len += Length;
-    }
 }
 
 // ── TX free callback ────────────────────────────────────────────────────────
@@ -207,25 +206,31 @@ static uint32_t tx_idx = 0;
 bool Stm32H7Eth::Transmit(const uint8_t* buffer, uint16_t length) {
     if (length > ETH_MAX_PAYLOAD || buffer == nullptr) return false;
 
+    uint16_t send_len = length;
     uint8_t* buf = Tx_Buff[tx_idx];
     tx_idx = (tx_idx + 1) % ETH_TX_DESC_CNT;
 
     memcpy(buf, buffer, length);
 
+    if (send_len < 60) {
+        memset(buf + send_len, 0, 60 - send_len);
+        send_len = 60;
+    }
+
     uint32_t alignedAddr = (uint32_t)buf & ~0x1FUL;
-    uint32_t alignedSize = (((uint32_t)buf - alignedAddr) + length + 0x1FUL) & ~0x1FUL;
+    uint32_t alignedSize = (((uint32_t)buf - alignedAddr) + send_len + 0x1FUL) & ~0x1FUL;
     SCB_CleanDCache_by_Addr((uint32_t*)alignedAddr, alignedSize);
 
     ETH_BufferTypeDef txBuf;
     txBuf.buffer = buf;
-    txBuf.len    = length;
+    txBuf.len    = send_len;
     txBuf.next   = nullptr;
 
     ETH_TxPacketConfig txCfg;
     memset(&txCfg, 0, sizeof(txCfg));
     txCfg.Attributes  = ETH_TX_PACKETS_FEATURES_CRCPAD;
     txCfg.CRCPadCtrl  = ETH_CRC_PAD_INSERT;
-    txCfg.Length      = length;
+    txCfg.Length      = send_len;
     txCfg.TxBuffer    = &txBuf;
 
     SCB_CleanDCache_by_Addr((uint32_t*)DMATxDscrTab, sizeof(DMATxDscrTab));
