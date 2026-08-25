@@ -67,7 +67,7 @@ int main(void) {
 #endif
 
     static app::BlinkTask blinky(led, DEFAULT_BLINK_RATE);
-    static stm32::FreeRtosThread blinkThread(blinky, "BlinkTask", 256, 3);
+    static stm32::FreeRtosThread blinkThread(blinky, "BlinkTask", 256, 1);
 
     // ── Ethernet driver configuration ──────────────────────────────────────
     static Lan8742Phy phy(0);  // PHY address 0 on Nucleo-H7S3L8
@@ -115,10 +115,10 @@ int main(void) {
     telemetryService.register_channel(str1Channel);
     telemetryService.register_channel(str6Channel);
     telemetryService.register_channel(raw0Channel);
-    static stm32::FreeRtosThread telemetryThread(telemetryService, "TelemetrySvc", 2048, 4);
+    static stm32::FreeRtosThread telemetryThread(telemetryService, "TelemetrySvc", 2048, 3);
 
     static net::services::CommandService commandService(netMan, discoveryService, telemetryService, NODE_ID, &otaService);
-    static stm32::FreeRtosThread commandThread(commandService, "CommandSvc", 2048, 3);
+    static stm32::FreeRtosThread commandThread(commandService, "CommandSvc", 2048, 5);
 
     // ── Central System Controller & Unified CLI Engine ─────────────────────
     static sys::SystemController sysCtrl(NODE_ID,
