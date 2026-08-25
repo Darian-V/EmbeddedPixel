@@ -5,6 +5,8 @@
 
 // lwIP
 #include "lwip/api.h"
+#include "lwip/ip.h"
+#include "lwip/tcp.h"
 
 // FreeRTOS
 #include "FreeRTOS.h"
@@ -45,47 +47,72 @@ void CommandService::run() {
 
     LOG_INFO("CommandService: starting TCP server on port %u\r\n", proto::PORT_COMMAND);
 
-    struct netconn* server_conn = netconn_new(NETCONN_TCP);
-    if (server_conn == nullptr) {
-        LOG_ERR("CommandService: netconn_new TCP failed\r\n");
-        vTaskDelete(nullptr);
-        return;
-    }
-
-    err_t err = netconn_bind(server_conn, IP_ADDR_ANY, proto::PORT_COMMAND);
-    if (err != ERR_OK) {
-        LOG_ERR("CommandService: TCP bind failed err=%d\r\n", (int)err);
-        netconn_delete(server_conn);
-        vTaskDelete(nullptr);
-        return;
-    }
-
-    err = netconn_listen(server_conn);
-    if (err != ERR_OK) {
-        LOG_ERR("CommandService: TCP listen failed err=%d\r\n", (int)err);
-        netconn_delete(server_conn);
-        vTaskDelete(nullptr);
-        return;
-    }
+    struct netconn* server_conn = nullptr;
 
     while (true) {
+        if (server_conn == nullptr) {
+            server_conn = netconn_new(NETCONN_TCP);
+            if (server_conn == nullptr) {
+                LOG_ERR("CommandService: netconn_new TCP failed\r\n");
+                vTaskDelay(pdMS_TO_TICKS(500));
+                continue;
+            }
+
+            if (server_conn->pcb.tcp != nullptr) {
+                ip_set_option(server_conn->pcb.tcp, SOF_REUSEADDR);
+                tcp_nagle_disable(server_conn->pcb.tcp);
+            }
+
+            err_t err = netconn_bind(server_conn, IP_ADDR_ANY, proto::PORT_COMMAND);
+            if (err != ERR_OK) {
+                LOG_ERR("CommandService: TCP bind failed err=%d\r\n", (int)err);
+                netconn_delete(server_conn);
+                server_conn = nullptr;
+                vTaskDelay(pdMS_TO_TICKS(500));
+                continue;
+            }
+
+            err = netconn_listen(server_conn);
+            if (err != ERR_OK) {
+                LOG_ERR("CommandService: TCP listen failed err=%d\r\n", (int)err);
+                netconn_delete(server_conn);
+                server_conn = nullptr;
+                vTaskDelay(pdMS_TO_TICKS(500));
+                continue;
+            }
+            LOG_INFO("CommandService: TCP server listening on port %u\r\n", proto::PORT_COMMAND);
+        }
+
         struct netconn* client_conn = nullptr;
-        err = netconn_accept(server_conn, &client_conn);
+        err_t err = netconn_accept(server_conn, &client_conn);
 
         if (err == ERR_OK && client_conn != nullptr) {
+            if (client_conn->pcb.tcp != nullptr) {
+                tcp_nagle_disable(client_conn->pcb.tcp);
+            }
+            netconn_set_recvtimeout(client_conn, 2000);
+            netconn_set_sendtimeout(client_conn, 0);
             ip_addr_t client_ip;
             u16_t client_port;
             netconn_peer(client_conn, &client_ip, &client_port);
-            LOG_INFO("CommandService: client connected from %s:%u\r\n",
-                     ipaddr_ntoa(&client_ip), client_port);
-
             handleClient(client_conn);
 
-            netconn_close(client_conn);
-            netconn_delete(client_conn);
-            LOG_INFO("CommandService: client disconnected\r\n");
+            // Graceful shutdown: close connection to flush all TX data & FIN before deleting netconn
+            err_t close_err = netconn_close(client_conn);
+            LOG_INFO("CommandService: netconn_close err=%d\r\n", (int)close_err);
+            vTaskDelay(pdMS_TO_TICKS(50));
+            err_t del_err = netconn_delete(client_conn);
+            LOG_INFO("CommandService: client disconnected del_err=%d\r\n", (int)del_err);
         } else {
-            vTaskDelay(pdMS_TO_TICKS(100));
+            if (err != ERR_TIMEOUT) {
+                LOG_ERR("CommandService: netconn_accept err=%d, re-arming listen socket\r\n", (int)err);
+                netconn_close(server_conn);
+                netconn_delete(server_conn);
+                server_conn = nullptr;
+                vTaskDelay(pdMS_TO_TICKS(100));
+            } else {
+                vTaskDelay(pdMS_TO_TICKS(10));
+            }
         }
     }
 }
@@ -135,6 +162,11 @@ private:
     size_t          buf_len_;
 };
 
+static inline err_t writeClientData(struct netconn* conn, const void* data, size_t size) {
+    size_t written = 0;
+    return netconn_write_partly(conn, data, size, NETCONN_COPY, &written);
+}
+
 } // namespace
 
 void CommandService::handleClient(struct netconn* clientConn) {
@@ -148,8 +180,12 @@ void CommandService::handleClient(struct netconn* clientConn) {
 
     while (true) {
         if (!reader.readExact(reinterpret_cast<uint8_t*>(&hdr), sizeof(hdr))) {
-            break; // Connection closed
+            LOG_INFO("CommandService: readExact header failed/timeout\r\n");
+            break; // Connection closed or timed out
         }
+
+        LOG_INFO("CommandService: RX hdr magic=0x%04X type=0x%04X len=%u\r\n",
+                 (unsigned)hdr.magic, (unsigned)hdr.msg_type, (unsigned)hdr.payload_len);
 
         if (hdr.magic != proto::PE_MAGIC) {
             sendAckNack(clientConn, hdr.msg_type, proto::StatusCode::ERR_INVALID_MAGIC);
@@ -163,11 +199,18 @@ void CommandService::handleClient(struct netconn* clientConn) {
 
         if (hdr.payload_len > 0) {
             if (!reader.readExact(s_payload_buffer, hdr.payload_len)) {
+                LOG_INFO("CommandService: readExact payload (%u bytes) failed\r\n", (unsigned)hdr.payload_len);
                 break;
             }
         }
 
         processCommand(clientConn, hdr, s_payload_buffer, &client_ip);
+
+        // For discrete RPC commands, exit immediately so accept() can service next client
+        if (hdr.msg_type != static_cast<uint16_t>(proto::MessageType::CMD_OTA_DATA)) {
+            break;
+        }
+        netconn_set_recvtimeout(clientConn, 1000);
     }
 }
 
@@ -220,7 +263,7 @@ void CommandService::processCommand(struct netconn* clientConn,
                 false
             );
 
-            netconn_write(clientConn, tx_buf, sizeof(tx_buf), NETCONN_COPY);
+            writeClientData(clientConn, tx_buf, sizeof(tx_buf));
             break;
         }
 
@@ -233,9 +276,7 @@ void CommandService::processCommand(struct netconn* clientConn,
                 const auto* cmd = reinterpret_cast<const proto::PayloadCommand*>(payload);
                 if (cmd->param2 > 100) {
                     stream_tag = cmd->param2; // FourCC tag passed in param2
-                }
-
-                if (cmd->cmd_id != 0) {
+                } else if (cmd->cmd_id != 0) {
                     stream_tag = cmd->cmd_id;
                 }
 
@@ -320,7 +361,7 @@ void CommandService::processCommand(struct netconn* clientConn,
             );
 
             uint16_t total_frame_len = sizeof(proto::PE_Header) + total_payload_len;
-            netconn_write(clientConn, tx_buf, total_frame_len, NETCONN_COPY);
+            writeClientData(clientConn, tx_buf, total_frame_len);
             LOG_INFO("CommandService: sent stream list (%u streams)\r\n", static_cast<unsigned>(count));
             break;
         }
@@ -354,7 +395,7 @@ void CommandService::processCommand(struct netconn* clientConn,
                 flags,
                 false
             );
-            netconn_write(clientConn, tx_buf, sizeof(tx_buf), NETCONN_COPY);
+            writeClientData(clientConn, tx_buf, sizeof(tx_buf));
             break;
         }
 
@@ -416,7 +457,7 @@ void CommandService::processCommand(struct netconn* clientConn,
                 proto::FLAG_IS_RESPONSE,
                 false
             );
-            netconn_write(clientConn, tx_buf, sizeof(tx_buf), NETCONN_COPY);
+            writeClientData(clientConn, tx_buf, sizeof(tx_buf));
             break;
         }
 
@@ -435,14 +476,24 @@ void CommandService::processCommand(struct netconn* clientConn,
             }
 
             char cmd_str[128] = {0};
-            size_t copy_len = (hdr.payload_len < sizeof(cmd_str) - 1) ? hdr.payload_len : sizeof(cmd_str) - 1;
-            if (copy_len > 0) {
-                memcpy(cmd_str, payload, copy_len);
-                cmd_str[copy_len] = '\0';
+            if (hdr.payload_len >= sizeof(proto::PayloadCliExec)) {
+                const auto* req = reinterpret_cast<const proto::PayloadCliExec*>(payload);
+                const char* cmd_text = reinterpret_cast<const char*>(payload + sizeof(proto::PayloadCliExec));
+                uint16_t text_len = req->cmd_len;
+                if (text_len > sizeof(cmd_str) - 1) text_len = sizeof(cmd_str) - 1;
+                memcpy(cmd_str, cmd_text, text_len);
+                cmd_str[text_len] = '\0';
+            } else {
+                size_t copy_len = (hdr.payload_len < sizeof(cmd_str) - 1) ? hdr.payload_len : sizeof(cmd_str) - 1;
+                if (copy_len > 0) {
+                    memcpy(cmd_str, payload, copy_len);
+                    cmd_str[copy_len] = '\0';
+                }
             }
 
             char resp_str[512] = {0};
             int resp_len = cli_->execute(cmd_str, resp_str, sizeof(resp_str));
+            LOG_INFO("CommandService: CLI exec cmd='%s' resp_len=%d\r\n", cmd_str, resp_len);
 
             uint8_t tx_buf[sizeof(proto::PE_Header) + sizeof(proto::PayloadCliExecResp) + sizeof(resp_str)];
             auto* resp_hdr = reinterpret_cast<proto::PE_Header*>(tx_buf);
@@ -466,7 +517,9 @@ void CommandService::processCommand(struct netconn* clientConn,
                 false
             );
 
-            netconn_write(clientConn, tx_buf, sizeof(proto::PE_Header) + total_payload_len, NETCONN_COPY);
+            err_t w_err = writeClientData(clientConn, tx_buf, sizeof(proto::PE_Header) + total_payload_len);
+            LOG_INFO("CommandService: write total_len=%u err=%d\r\n",
+                     (unsigned)(sizeof(proto::PE_Header) + total_payload_len), (int)w_err);
             break;
         }
 
@@ -517,7 +570,7 @@ void CommandService::sendAckNack(struct netconn* clientConn,
         false
     );
 
-    netconn_write(clientConn, tx_buf, sizeof(tx_buf), NETCONN_COPY);
+    writeClientData(clientConn, tx_buf, sizeof(tx_buf));
 }
 
 } // namespace net::services

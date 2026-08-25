@@ -155,6 +155,7 @@ void TelemetryService::run() {
             vTaskDelay(pdMS_TO_TICKS(500));
         }
     }
+    netconn_bind(conn, IP_ADDR_ANY, proto::PORT_STREAM);
 
     TickType_t now = xTaskGetTickCount();
     for (size_t i = 0; i < channel_count_; ++i) {
