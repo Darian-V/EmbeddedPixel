@@ -3,6 +3,7 @@
 #include "Stm32H7Gpio.h"
 #include "Stm32H7Uart.h"
 #include "Stm32H7Dts.h"
+#include "Stm32H7Can.h"
 
 extern "C" void Error_Handler(void);
 
@@ -20,31 +21,48 @@ static void SystemClock_Config(void) {
 
   /** Initializes the RCC Oscillators according to the specified parameters
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI | RCC_OSCILLATORTYPE_CSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.CSIState = RCC_CSI_ON;
+  RCC_OscInitStruct.CSICalibrationValue = RCC_CSICALIBRATION_DEFAULT;
+
+  // PLL1: HSI (64MHz) / M(4) = 16MHz -> N(37.5) -> VCO(600MHz) -> P=600MHz (SYSCLK), Q=100MHz, S=300MHz (XSPI2)
   RCC_OscInitStruct.PLL1.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL1.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL1.PLLM = 32;
-  RCC_OscInitStruct.PLL1.PLLN = 300;
+  RCC_OscInitStruct.PLL1.PLLM = 4;
+  RCC_OscInitStruct.PLL1.PLLN = 37;
   RCC_OscInitStruct.PLL1.PLLP = 1;
-  RCC_OscInitStruct.PLL1.PLLQ = 2;
+  RCC_OscInitStruct.PLL1.PLLQ = 6;
   RCC_OscInitStruct.PLL1.PLLR = 2;
   RCC_OscInitStruct.PLL1.PLLS = 2;
   RCC_OscInitStruct.PLL1.PLLT = 2;
-  RCC_OscInitStruct.PLL1.PLLFractional = 0;
+  RCC_OscInitStruct.PLL1.PLLFractional = 4096; // 4096/8192 = 0.5 -> 37.5 * 16 = 600MHz
+
+  // PLL2: HSI (64MHz) / M(4) = 16MHz -> N(25) -> VCO(400MHz) -> P=100MHz (FDCAN/ADC), Q=200MHz, S=200MHz, T=200MHz (SDMMC)
   RCC_OscInitStruct.PLL2.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL2.PLLSource = RCC_PLLSOURCE_HSI;
   RCC_OscInitStruct.PLL2.PLLM = 4;
   RCC_OscInitStruct.PLL2.PLLN = 25;
-  RCC_OscInitStruct.PLL2.PLLP = 2;
+  RCC_OscInitStruct.PLL2.PLLP = 4;
   RCC_OscInitStruct.PLL2.PLLQ = 2;
   RCC_OscInitStruct.PLL2.PLLR = 2;
   RCC_OscInitStruct.PLL2.PLLS = 2;
   RCC_OscInitStruct.PLL2.PLLT = 2;
   RCC_OscInitStruct.PLL2.PLLFractional = 0;
-  RCC_OscInitStruct.PLL3.PLLState = RCC_PLL_NONE;
+
+  // PLL3: HSI (64MHz) / M(4) = 16MHz -> N(25) -> VCO(400MHz) -> P=200MHz, Q=200MHz, R=192/200MHz, S=50MHz (ETH PHY)
+  RCC_OscInitStruct.PLL3.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL3.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL3.PLLM = 4;
+  RCC_OscInitStruct.PLL3.PLLN = 25;
+  RCC_OscInitStruct.PLL3.PLLP = 2;
+  RCC_OscInitStruct.PLL3.PLLQ = 2;
+  RCC_OscInitStruct.PLL3.PLLR = 2;
+  RCC_OscInitStruct.PLL3.PLLS = 8; // 400MHz / 8 = 50.0 MHz for RMII Ethernet!
+  RCC_OscInitStruct.PLL3.PLLT = 2;
+  RCC_OscInitStruct.PLL3.PLLFractional = 0;
 
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -220,3 +238,10 @@ static stm32::h7::Stm32H7Dts g_dts_sensor;
 hal::ITempSensor& Board_GetTempSensor() {
     return g_dts_sensor;
 }
+
+static stm32::h7::Stm32H7Can g_can(FDCAN1);
+
+hal::ICan& Board_GetCan() {
+    return g_can;
+}
+

@@ -4,6 +4,7 @@
 #include "IGpio.h"
 #include "IUart.h"
 #include "ITempSensor.h"
+#include "ICan.h"
 
 // Interface for board initialization
 // Apps can call this without knowing which board is underneath
@@ -20,5 +21,8 @@ hal::IUart& Board_GetDebugUart();
 
 // Returns the board's on-chip temperature sensor.
 hal::ITempSensor& Board_GetTempSensor();
+
+// Returns the board's CAN controller, fully initialized.
+hal::ICan& Board_GetCan();
 
 #endif // BOARD_INIT_H

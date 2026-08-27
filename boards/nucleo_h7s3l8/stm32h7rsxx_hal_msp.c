@@ -310,5 +310,44 @@ void HAL_ETH_MspDeInit(ETH_HandleTypeDef* ethHandle)
     }
 }
 
+/**
+ * @brief FDCAN MSP Init — Nucleo-H7S3L8 board.
+ *
+ * Configures FDCAN1 peripheral clock and initializes PD0 (RX) and PD1 (TX).
+ */
+void HAL_FDCAN_MspInit(FDCAN_HandleTypeDef* hfdcan)
+{
+    if (hfdcan->Instance == FDCAN1)
+    {
+        RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+        PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_FDCAN;
+        PeriphClkInit.FdcanClockSelection  = RCC_FDCANCLKSOURCE_PLL2P;
+        HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit);
+
+        __HAL_RCC_FDCAN_CLK_ENABLE();
+        __HAL_RCC_GPIOD_CLK_ENABLE();
+
+        GPIO_InitTypeDef GPIO_InitStruct = {0};
+        GPIO_InitStruct.Pin       = GPIO_PIN_0 | GPIO_PIN_1;
+        GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
+        GPIO_InitStruct.Pull      = GPIO_NOPULL;
+        GPIO_InitStruct.Speed     = GPIO_SPEED_FREQ_VERY_HIGH;
+        GPIO_InitStruct.Alternate = GPIO_AF9_FDCAN1;
+        HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+    }
+}
+
+/**
+ * @brief FDCAN MSP DeInit — Nucleo-H7S3L8 board.
+ */
+void HAL_FDCAN_MspDeInit(FDCAN_HandleTypeDef* hfdcan)
+{
+    if (hfdcan->Instance == FDCAN1)
+    {
+        __HAL_RCC_FDCAN_CLK_DISABLE();
+        HAL_GPIO_DeInit(GPIOD, GPIO_PIN_0 | GPIO_PIN_1);
+    }
+}
+
 /* USER CODE END 1 */
 

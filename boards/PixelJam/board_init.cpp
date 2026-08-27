@@ -2,6 +2,7 @@
 #include "stm32h7xx_hal.h"
 #include "Stm32H743Gpio.h"
 #include "Stm32H743Uart.h"
+#include "Stm32H743Can.h"
 
 extern "C" void Error_Handler(void);
 
@@ -114,4 +115,10 @@ hal::IGpio& Board_GetLed() {
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
     return g_status_led;
+}
+
+static stm32::h743::Stm32H743Can g_can(FDCAN1);
+
+hal::ICan& Board_GetCan() {
+    return g_can;
 }
