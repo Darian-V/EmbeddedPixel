@@ -87,9 +87,22 @@ else()
             target_compile_definitions(${EXECUTABLE_NAME} PRIVATE ETHERNETDEV_V2)
         endif()
     endif()
-    if(APP STREQUAL "blinky" OR APP STREQUAL "ethernetdev" OR APP STREQUAL "temp_test")
+    if(APP STREQUAL "blinky" OR APP STREQUAL "ethernetdev" OR APP STREQUAL "temp_test" OR APP STREQUAL "MREG")
         target_sources(${EXECUTABLE_NAME} PRIVATE
             ${CMAKE_SOURCE_DIR}/components/tasks/BlinkTask.cpp
+        )
+    endif()
+    if(APP STREQUAL "MREG")
+        target_include_directories(${EXECUTABLE_NAME} PRIVATE
+            ${CMAKE_SOURCE_DIR}/components/drivers/uim342
+            ${CMAKE_SOURCE_DIR}/components/mreg
+            ${CMAKE_SOURCE_DIR}/boards/${BOARD}/apps/MREG
+        )
+        target_sources(${EXECUTABLE_NAME} PRIVATE
+            ${CMAKE_SOURCE_DIR}/components/drivers/uim342/Uim342Driver.cpp
+            ${CMAKE_SOURCE_DIR}/components/mreg/MregSupervisor.cpp
+            ${CMAKE_SOURCE_DIR}/components/mreg/MregTrajectoryPlanner.cpp
+            ${CMAKE_SOURCE_DIR}/components/mreg/MregCli.cpp
         )
     endif()
     if(APP STREQUAL "temp_test")
