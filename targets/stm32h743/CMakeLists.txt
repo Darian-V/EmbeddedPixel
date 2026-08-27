@@ -26,6 +26,7 @@ target_sources(${EXECUTABLE_NAME} PRIVATE
 target_sources(${EXECUTABLE_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/hal_impl/Stm32H743Gpio.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/hal_impl/Stm32H743Uart.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/hal_impl/Stm32H743Can.cpp
 )
 
 if(NOT APP STREQUAL "bootloader")

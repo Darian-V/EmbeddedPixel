@@ -28,6 +28,7 @@ target_sources(${EXECUTABLE_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/hal_impl/Stm32H7Uart.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/hal_impl/Stm32H7Dts.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/hal_impl/Stm32ExtMemFlash.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/hal_impl/Stm32H7Can.cpp
 )
 
 if(NOT APP STREQUAL "bootloader")
